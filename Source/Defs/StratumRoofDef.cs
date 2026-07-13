@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using Verse;
 
 using SolarWeb.Stratum.DefModExtensions;
 using SolarWeb.Stratum.Stats;
+using SolarWeb.Stratum.UI;
 
 namespace SolarWeb.Stratum.Defs;
 
@@ -27,13 +29,38 @@ public class StratumRoofDef : RoofDef
   {
     get
     {
-      var map = Find.CurrentMap;
-      if (map == null)
-        return base.LabelCap;
+      SelectedRoof? selectedRoof = null;
+      var selectedObjects = Find.Selector.SelectedObjects;
+      if (selectedObjects != null)
+      {
+        for (int i = 0; i < selectedObjects.Count; i++)
+        {
+          if (selectedObjects[i] is SelectedRoof sr && sr.def == this)
+          {
+            selectedRoof = sr;
+            break;
+          }
+        }
+      }
 
-      var cell = Verse.UI.MouseCell();
-      if (!cell.InBounds(map) || map.roofGrid.RoofAt(cell) != this)
-        return base.LabelCap;
+      Map map;
+      IntVec3 cell;
+
+      if (selectedRoof != null)
+      {
+        map = selectedRoof.map;
+        cell = selectedRoof.cell;
+      }
+      else
+      {
+        map = Find.CurrentMap;
+        if (map == null)
+          return base.LabelCap;
+
+        cell = Verse.UI.MouseCell();
+        if (!cell.InBounds(map) || map.roofGrid.RoofAt(cell) != this)
+          return base.LabelCap;
+      }
 
       var integrityGrid = map.GetComponent<MapComponents.RoofIntegrityGrid>();
       if (integrityGrid == null)
@@ -51,6 +78,35 @@ public class StratumRoofDef : RoofDef
       {
         float pct = (float)hp / maxHp;
         label += $" ({hp} / {maxHp} {pct.ToStringPercent("F0")})";
+      }
+
+      var coating = map.GetComponent<MapComponents.SkylightCoating>();
+      if (coating != null)
+      {
+        float dirt = coating.GetDirtLevel(cell);
+        float pollen = coating.GetPollenLevel(cell);
+        float snow = coating.GetSnowLevel(cell);
+        List<string> details = [];
+
+        if (dirt > 0.01f)
+        {
+          details.Add($"{"SolarWeb_Stratum_Dust".Translate()}: {dirt.ToStringPercent("F0")}");
+        }
+
+        if (pollen > 0.01f)
+        {
+          details.Add($"{"SolarWeb_Stratum_Pollen".Translate()}: {pollen.ToStringPercent("F0")}");
+        }
+
+        if (snow > 0.01f)
+        {
+          details.Add($"{"SolarWeb_Stratum_Snow".Translate()}: {snow.ToStringPercent("F0")}");
+        }
+
+        if (details.Count > 0)
+        {
+          label += $" ({string.Join(", ", details)})";
+        }
       }
 
       return label;

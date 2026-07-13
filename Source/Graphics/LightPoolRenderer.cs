@@ -1,7 +1,9 @@
 using RimWorld;
 using UnityEngine;
 using Verse;
+
 using SolarWeb.Stratum.Stats;
+using SolarWeb.Stratum.MapComponents;
 
 namespace SolarWeb.Stratum.Graphics;
 
@@ -69,6 +71,8 @@ public class LightPoolRenderer : SectionLayer
     LayerSubMesh subMesh = GetSubMesh(PoolMat);
     if (subMesh == null) return;
 
+    var skylightDirt = map.GetComponent<SkylightCoating>();
+
     foreach (IntVec3 c in cellRect)
     {
       if (isCutscene && captureBounds.Contains(c)) continue;
@@ -76,7 +80,7 @@ public class LightPoolRenderer : SectionLayer
       RoofDef roof = roofGrid.RoofAt(c);
       if (roof == null || !RoofStatCache.IsSkylight(roof)) continue;
 
-      float transparency = RoofStatCache.GetTransparency(roof);
+      float transparency = RoofStatCache.GetEffectiveTransparency(roof, map, c);
       if (transparency <= 0f) continue;
 
       Color glassColor = RoofStatCache.GetColor(roof);

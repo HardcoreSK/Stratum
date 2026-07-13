@@ -6,6 +6,8 @@ using Verse;
 
 using SolarWeb.Stratum.Stats;
 using SolarWeb.Stratum.WorldComponents;
+using SolarWeb.Stratum.DefModExtensions;
+using SolarWeb.Stratum.Graphics;
 
 namespace SolarWeb.Stratum.UI;
 
@@ -50,11 +52,59 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
 
   public void Dispose()
   {
+    RoofSelectionTracker.Instance.ClearSelectTimeFor(this);
     Find.World.GetComponent<RoofSelectionPool>()?.Return(this);
   }
 
   public IEnumerable<Gizmo> GetGizmos()
   {
+    var ext = def.GetModExtension<BuildableRoofExtension>();
+    if (ext != null && BuildableRoofGenerator.RoofToDesignator.TryGetValue(def, out var designator))
+    {
+      var stuff = map.GetComponent<MapComponents.RoofIntegrityGrid>()?.GetStuff(cell);
+      var tint = map.GetComponent<MapComponents.RoofIntegrityGrid>()?.GetGlassTint(cell);
+
+      Color defaultIconColor = Color.white;
+      var bDef = ext.buildableDef;
+      var gd = RoofStatCache.GetGraphicData(def);
+      if (bDef != null)
+      {
+        if (gd != null)
+        {
+          defaultIconColor = gd.color;
+        }
+        else if (bDef.graphicData != null)
+        {
+          defaultIconColor = bDef.graphicData.color;
+        }
+      }
+
+      yield return new Command_BuildCopyRoof
+      {
+        defaultLabel = "CommandBuildCopy".Translate(),
+        defaultDesc = "CommandBuildCopyDesc".Translate(),
+        icon = designator.icon,
+        iconTexCoords = designator.iconTexCoords,
+        hotKey = KeyBindingDefOf.Misc11,
+        roofDef = def,
+        stuffDef = stuff,
+        selectedTint = tint,
+        defaultIconColor = defaultIconColor,
+        action = delegate
+        {
+          if (stuff != null)
+          {
+            designator.SetStuffDef(stuff);
+          }
+          if (RoofStatCache.IsSkylight(def))
+          {
+            designator.SelectedTint = tint;
+          }
+          Find.DesignatorManager.Select(designator);
+        }
+      };
+    }
+
     var disabled = def?.isThickRoof == true || map.areaManager.NoRoof[cell];
     var disabledReason = def?.isThickRoof == true ? "MessageNothingCanRemoveThickRoofs".Translate()
       : map.areaManager.NoRoof[cell] ? "Stratum_AlreadyRemoving".Translate() : null;
@@ -79,7 +129,7 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
     {
       yield return new Command_Action
       {
-        
+
         defaultLabel = "Stratum_CancelRoofRemoval".Translate(),
         defaultDesc = "Stratum_CancelRoofRemovalDesc".Translate(),
         icon = ContentFinder<Texture2D>.Get("UI/Designators/Cancel"),
@@ -90,13 +140,44 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
         }
       };
     }
+
+    if (def == RimWorld.RoofDefOf.RoofRockThin || def == RimWorld.RoofDefOf.RoofRockThick)
+    {
+      var designation = map.designationManager.DesignationAt(cell, DefOf.DesignationDefOf.SmoothRoof);
+      if (designation != null)
+      {
+        yield return new Command_Action
+        {
+          defaultLabel = "SolarWeb_Stratum_CancelSmoothRoof".Translate(),
+          defaultDesc = "SolarWeb_Stratum_CancelSmoothRoofDesc".Translate(),
+          icon = ContentFinder<Texture2D>.Get("UI/Designators/Cancel"),
+          action = delegate
+          {
+            map.designationManager.TryRemoveDesignation(cell, DefOf.DesignationDefOf.SmoothRoof);
+          },
+          hotKey = KeyBindingDefOf.Designator_Cancel
+        };
+      }
+      else
+      {
+        yield return new Command_Action
+        {
+          defaultLabel = "SolarWeb_Stratum_DesignatorSmoothRoof".Translate(),
+          defaultDesc = "SolarWeb_Stratum_DesignatorSmoothRoofDesc".Translate(),
+          icon = ContentFinder<Texture2D>.Get("UI/Designators/SmoothSurface"),
+          action = delegate
+          {
+            map.designationManager.AddDesignation(new Designation(cell, DefOf.DesignationDefOf.SmoothRoof));
+          }
+        };
+      }
+    }
   }
 
   public string GetInspectString()
   {
     StringBuilder sb = new();
 
-    var integrity = map.GetComponent<MapComponents.RoofIntegrityGrid>();
     var solarComp = map.GetComponent<MapComponents.SolarRoofMapComponent>();
     if (solarComp != null && solarComp.TryGetSolarNetworkPower(cell, out var cellPower, out var netPower))
     {
@@ -104,19 +185,8 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
       sb.AppendLine("Stratum_SolarPower_Grid".Translate(netPower.currentPower.ToString("F0"), netPower.maxPower.ToString("F0")));
     }
 
-    float beauty = RoofStatCache.GetBeauty(def, integrity?.GetStuff(cell));
-    if (beauty != 0) sb.AppendLine("Beauty_Label".Translate() + ": " + beauty.ToString("F2"));
-
-    float transparency = RoofStatCache.GetTransparency(def);
-    if (transparency > 0) sb.AppendLine("Stratum_Transparency".Translate() + ": " + transparency.ToStringPercent());
-
     float solarOut = RoofStatCache.GetSolarOutput(def);
     if (solarOut > 0) sb.AppendLine(DefOf.StatDefOf.SolarOutput.LabelCap + ": " + solarOut.ToString("F1") + " W");
-
-    float conductivity = RoofStatCache.GetThermalConductivity(def, integrity?.GetStuff(cell));
-    float insulation = 1f - conductivity;
-    string insulationStr = insulation.ToString("P1");
-    sb.AppendLine(DefOf.StatDefOf.Insulation.LabelCap + ": " + insulationStr);
 
     return sb.ToString().TrimEndNewlines();
   }
@@ -139,5 +209,17 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
     {
       map.areaManager.NoRoof[cell] = false;
     }
+  }
+}
+
+public class Command_BuildCopyRoof : Command_Action
+{
+  public RoofDef roofDef = null!;
+  public ThingDef? stuffDef;
+  public Color? selectedTint;
+
+  public override void DrawIcon(Rect rect, Material? buttonMat, GizmoRenderParms parms)
+  {
+    RoofIconUtility.DrawDesignatorIcon(rect, roofDef, stuffDef, selectedTint, defaultIconColor, icon, iconTexCoords, buttonMat, parms);
   }
 }

@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using Verse;
 
 using SolarWeb.Stratum.DefModExtensions;
 using SolarWeb.Stratum.Stats;
+using SolarWeb.Stratum.Hooks;
+using SolarWeb.Stratum.Utilities;
 
 namespace SolarWeb.Stratum.MapComponents;
 
@@ -16,84 +19,90 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
   public bool hasScanned;
   private object scanLockInt = new();
 
+  private Dictionary<int, short>? loadedDamagedCells;
+  private Dictionary<int, ThingDef>? loadedSavedStuff;
+  private Dictionary<int, UnityEngine.Color>? loadedSavedTints;
+
   public HashSet<int> RoofsNeedingRepair => roofsNeedingRepair;
   internal short[] HitPointsArray => hitPoints;
+  internal UnityEngine.Color?[] GlassTintsArray => glassTints;
   internal ThingDef?[] StuffDefsArray => stuffDefs;
 
   public override void ExposeData()
   {
     base.ExposeData();
-    Scribe_Values.Look(ref hasScanned, "hasScanned", false);
-
-    // We only save cells that have missing hitpoints or custom data to save space.
-    Dictionary<int, short>? damagedCells = null;
-    Dictionary<int, ThingDef>? savedStuff = null;
-    Dictionary<int, UnityEngine.Color>? savedTints = null;
 
     if (Scribe.mode == LoadSaveMode.Saving)
     {
-      damagedCells = [];
-      savedStuff = [];
-      savedTints = [];
+      loadedDamagedCells = [];
+      loadedSavedStuff = [];
+      loadedSavedTints = [];
       for (int i = 0; i < hitPoints.Length; i++)
       {
         if (roofsNeedingRepair.Contains(i))
-          damagedCells[i] = hitPoints[i];
+          loadedDamagedCells[i] = hitPoints[i];
 
         if (stuffDefs[i] != null)
-          savedStuff[i] = stuffDefs[i]!;
+          loadedSavedStuff[i] = stuffDefs[i]!;
 
         if (glassTints[i] != null)
-          savedTints[i] = glassTints[i]!.Value;
+          loadedSavedTints[i] = glassTints[i]!.Value;
       }
     }
 
-    Scribe_Collections.Look(ref damagedCells, "damagedCells", LookMode.Value, LookMode.Value);
-    Scribe_Collections.Look(ref savedStuff, "savedStuff", LookMode.Value, LookMode.Def);
-    Scribe_Collections.Look(ref savedTints, "savedTints", LookMode.Value, LookMode.Value);
+    Scribe_Collections.Look(ref loadedDamagedCells, "damagedCells", LookMode.Value, LookMode.Value);
+    Scribe_Collections.Look(ref loadedSavedStuff, "savedStuff", LookMode.Value, LookMode.Def);
+    Scribe_Collections.Look(ref loadedSavedTints, "savedTints", LookMode.Value, LookMode.Value);
 
-    if (Scribe.mode == LoadSaveMode.LoadingVars)
+    if (Scribe.mode == LoadSaveMode.PostLoadInit)
     {
-      if (damagedCells != null)
+      scanLockInt = new object();
+
+      if (loadedDamagedCells != null)
       {
-        foreach (var kvp in damagedCells)
+        foreach (var kvp in loadedDamagedCells)
         {
           hitPoints[kvp.Key] = kvp.Value;
           roofsNeedingRepair.Add(kvp.Key);
         }
       }
 
-      if (savedStuff != null)
+      if (loadedSavedStuff != null)
       {
-        foreach (var kvp in savedStuff)
+        foreach (var kvp in loadedSavedStuff)
         {
           stuffDefs[kvp.Key] = kvp.Value;
         }
       }
 
-      if (savedTints != null)
+      if (loadedSavedTints != null)
       {
-        foreach (var kvp in savedTints)
+        foreach (var kvp in loadedSavedTints)
         {
           glassTints[kvp.Key] = kvp.Value;
         }
       }
-    }
 
-    if (Scribe.mode == LoadSaveMode.PostLoadInit)
-    {
-      scanLockInt = new object();
+      loadedDamagedCells = null;
+      loadedSavedStuff = null;
+      loadedSavedTints = null;
     }
   }
 
   public override void FinalizeInit()
   {
     base.FinalizeInit();
+    InitializeNaturalRoofsStuff();
+
     if (!hasScanned)
     {
       ExecuteScan();
     }
-    Utilities.StratumHooks.OnRoofChanged += Notify_StratumRoofChanged;
+    var registry = MapHookRegistry.Get(map);
+    if (registry != null)
+    {
+      registry.Register<MapHookRegistry.RoofChangedHandler>(MapHookRegistry.HookId.RoofChanged, Notify_StratumRoofChanged);
+    }
     if (map.areaManager != null)
     {
       map.areaManager.BuildRoof?.Clear();
@@ -101,15 +110,82 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     }
   }
 
+  internal void InitializeNaturalRoofsStuff()
+  {
+    var numCells = map.cellIndices.NumGridCells;
+    var roofGrid = map.roofGrid;
+    for (int i = 0; i < numCells; i++)
+    {
+      var roof = roofGrid.RoofAt(i);
+      if (roof != null && roof.isNatural)
+      {
+        var cell = map.cellIndices.IndexToCell(i);
+        if (stuffDefs[i] == null)
+        {
+          stuffDefs[i] = GetStonyStuffForCell(roof, cell, map);
+        }
+      }
+    }
+  }
+
+
+
   public override void MapRemoved()
   {
     base.MapRemoved();
-    Utilities.StratumHooks.OnRoofChanged -= Notify_StratumRoofChanged;
+    var registry = MapHookRegistry.Get(map);
+    if (registry != null)
+    {
+      registry.Unregister<MapHookRegistry.RoofChangedHandler>(MapHookRegistry.HookId.RoofChanged, Notify_StratumRoofChanged);
+    }
   }
 
   private void Notify_StratumRoofChanged(Map m, IntVec3 c, RoofDef? oldRoof, RoofDef? newRoof)
   {
     if (m != map) return;
+
+    try
+    {
+      if (Find.Selector != null && Find.Selector.SelectedObjects != null && Find.Selector.SelectedObjects.Count > 0)
+      {
+        for (int i = Find.Selector.SelectedObjects.Count - 1; i >= 0; i--)
+        {
+          var obj = Find.Selector.SelectedObjects[i];
+          if (obj is UI.SelectedRoof sr && sr.map == map && sr.cell == c)
+          {
+            if (newRoof == null || sr.def != newRoof)
+            {
+              Find.Selector.Deselect(sr);
+            }
+          }
+        }
+      }
+    }
+    catch (Exception ex)
+    {
+      StratumLog.Error($"Error in RoofIntegrityGrid Notify_StratumRoofChanged selection cleanup: {ex}");
+    }
+
+    if (map.areaManager != null)
+    {
+      if (map.areaManager.NoRoof != null) map.areaManager.NoRoof[c] = false;
+      if (map.areaManager.BuildRoof != null) map.areaManager.BuildRoof[c] = false;
+    }
+
+    if (map.regionAndRoomUpdater != null && map.regionAndRoomUpdater.Enabled)
+    {
+      var room = c.GetRoom(map);
+      if (room != null && room.Districts != null)
+      {
+        foreach (var district in room.Districts)
+        {
+          if (district != null)
+          {
+            district.Notify_RoofChanged();
+          }
+        }
+      }
+    }
 
     if (newRoof != null && RoofStatCache.IsCustomRoof(newRoof))
     {
@@ -141,6 +217,32 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     }
     else
     {
+      if (oldRoof != null && RoofStatCache.IsCustomRoof(oldRoof))
+      {
+        if (RoofBuildings.isDeconstructingRoof)
+        {
+          var stuff = GetStuff(c);
+          var ext = oldRoof.GetModExtension<BuildableRoofExtension>();
+          if (ext != null && ext.buildableDef != null)
+          {
+            var costList = ext.buildableDef.CostListAdjusted(stuff);
+            if (costList != null)
+            {
+              float refundFraction = ext.buildableDef.resourcesFractionWhenDeconstructed;
+              foreach (var cost in costList)
+              {
+                int count = GenMath.RoundRandom(cost.count * refundFraction);
+                if (count > 0)
+                {
+                  var deconstructItem = ThingMaker.MakeThing(cost.thingDef);
+                  deconstructItem.stackCount = count;
+                  GenPlace.TryPlaceThing(deconstructItem, c, map, ThingPlaceMode.Near);
+                }
+              }
+            }
+          }
+        }
+      }
       RemoveRoof(c);
     }
   }
@@ -150,6 +252,7 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     lock (scanLockInt)
     {
       if (hasScanned && !force) return;
+      InitializeNaturalRoofsStuff();
       hasScanned = true;
       ParallelMapScanner.ExecuteScan(this, force);
     }
@@ -193,6 +296,24 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     return hitPoints[map.cellIndices.CellToIndex(cell)];
   }
 
+  public void SetHitPoints(IntVec3 cell, short hp)
+  {
+    if (!cell.InBounds(map)) return;
+    int index = map.cellIndices.CellToIndex(cell);
+    var roof = map.roofGrid.RoofAt(cell);
+    if (roof == null) return;
+
+    short maxHP = GetMaxHitPoints(cell);
+    hitPoints[index] = (short)UnityEngine.Mathf.Clamp(hp, 0, maxHP);
+
+    if (hitPoints[index] < maxHP)
+      roofsNeedingRepair.Add(index);
+    else
+      roofsNeedingRepair.Remove(index);
+
+    map.mapDrawer.MapMeshDirty(cell, MapMeshFlagDefOf.Roofs);
+  }
+
   public float GetEffectiveInsulation(IntVec3 cell)
   {
     if (!cell.InBounds(map)) return 0f;
@@ -206,7 +327,9 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     if (!cell.InBounds(map)) return 0;
     var roof = map.roofGrid.RoofAt(cell);
     if (roof == null) return 0;
-    return (short)RoofStatCache.GetMaxHitPoints(roof, GetStuff(cell));
+    int maxHp = RoofStatCache.GetMaxHitPoints(roof, GetStuff(cell));
+    maxHp = MapHookRegistry.GetCellRoofMaxHitPoints(map, cell, maxHp);
+    return (short)maxHp;
   }
 
   public ThingDef? GetStuff(IntVec3 cell)
@@ -219,6 +342,12 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
   {
     if (!cell.InBounds(map)) return null;
     return glassTints[map.cellIndices.CellToIndex(cell)];
+  }
+
+  public UnityEngine.Color? GetGlassTint(int index)
+  {
+    if (index < 0 || index >= glassTints.Length) return null;
+    return glassTints[index];
   }
 
   public void TakeDamage(IntVec3 cell, float amount, float penetration = 0f, DamageInfo? dinfo = null)
@@ -234,30 +363,33 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
 
     var stuff = stuffDefs[index];
     float dt = RoofStatCache.GetDamageThreshold(roof, stuff);
+    dt = MapHookRegistry.GetCellRoofDamageThreshold(map, cell, dt);
+
     float ar = RoofStatCache.GetArmorRating(roof, stuff);
+    ar = MapHookRegistry.GetCellRoofArmorRating(map, cell, ar);
 
     float effectiveDamage = amount;
 
-    if (penetration > 0f && ar > 0f)
+    bool handled = false;
+    if (MapHookRegistry.Get(map)?.GetHandlers<MapHookRegistry.RoofDamageCalculationHandler>(MapHookRegistry.HookId.RoofDamageCalculation) is List<MapHookRegistry.RoofDamageCalculationHandler> handlers)
     {
-      // We interpret AR as mm RHA equivalent if it's high, or scale it if it's low.
-      float effectiveArmor = ar > 2f ? ar : ar * 10f;
-
-      if (penetration > effectiveArmor)
+      foreach (var handler in handlers)
       {
-        effectiveDamage = amount * (1f - (effectiveArmor / (penetration * 2f)));
-      }
-      else
-      {
-        effectiveDamage = amount * 0.05f;
+        if (handler(roof, stuff, amount, penetration, dinfo, ref effectiveDamage))
+        {
+          handled = true;
+          break;
+        }
       }
     }
-    else
+
+    if (!handled)
     {
       effectiveDamage -= dt;
       if (effectiveDamage <= 0) return;
 
-      effectiveDamage *= (1f - ar);
+      float effectiveArmor = System.Math.Max(0f, ar - penetration);
+      effectiveDamage *= (1f - effectiveArmor);
     }
 
     if (effectiveDamage <= 0) return;
@@ -285,26 +417,18 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
       var ext = roof.GetModExtension<BuildableRoofExtension>();
       if (ext != null)
       {
-        if (Find.PlaySettings.autoRebuild && map.areaManager.Home[cell])
+        if (Find.PlaySettings != null && Find.PlaySettings.autoRebuild && map.areaManager?.Home != null && map.areaManager.Home[cell])
         {
           map.GetComponent<RoofConstructionTracker>()?.RebuildRoof(cell, roof, ext, stuff, tint);
         }
 
-        var bDef = ext.buildableDef;
-        if (bDef != null && !bDef.CostList.NullOrEmpty())
+        int debrisCount = Rand.RangeInclusive(1, 2);
+        for (int i = 0; i < debrisCount; i++)
         {
-          float fraction = bDef.resourcesFractionWhenDeconstructed;
-          var costList = bDef.CostListAdjusted(stuff);
-          foreach (var cost in costList)
-          {
-            int count = GenMath.RoundRandom(cost.count * fraction);
-            if (count > 0)
-            {
-              var thing = ThingMaker.MakeThing(cost.thingDef);
-              thing.stackCount = count;
-              GenPlace.TryPlaceThing(thing, cell, map, ThingPlaceMode.Near);
-            }
-          }
+          if (roof.collapseLeavingThingDef == null) continue;
+
+          var debris = ThingMaker.MakeThing(roof.collapseLeavingThingDef);
+          GenPlace.TryPlaceThing(debris, cell, map, ThingPlaceMode.Near);
         }
       }
     }
@@ -317,6 +441,7 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
 
   public void Repair(IntVec3 cell, int amount)
   {
+    if (map == null || !cell.InBounds(map)) return;
     int index = map.cellIndices.CellToIndex(cell);
     var maxHP = GetMaxHitPoints(cell);
 
@@ -330,5 +455,82 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
       }
       map.mapDrawer.MapMeshDirty(cell, MapMeshFlagDefOf.Roofs);
     }
+  }
+
+  public static ThingDef GetStonyStuffForTerrain(RoofDef roof, TerrainDef floor)
+  {
+    if (floor == null || roof == null)
+    {
+      return DefDatabase<ThingDef>.GetNamed("BlocksGranite");
+    }
+
+    var ext = roof.GetModExtension<BuildableRoofExtension>();
+    if (ext != null && ext.terrainToStuff.TryGetValue(floor, out var stuff))
+    {
+      return stuff;
+    }
+
+    // Secondary fallback: check if any custom roof extension has this mapping
+    foreach (var rDef in DefDatabase<RoofDef>.AllDefs)
+    {
+      var rExt = rDef.GetModExtension<BuildableRoofExtension>();
+      if (rExt != null && rExt.terrainToStuff.TryGetValue(floor, out stuff))
+      {
+        return stuff;
+      }
+    }
+
+    return DefDatabase<ThingDef>.GetNamed("BlocksGranite");
+  }
+
+  public static ThingDef GetStonyStuffForCell(RoofDef roof, IntVec3 cell, Map map)
+  {
+    if (cell.InBounds(map))
+    {
+      var edifice = cell.GetEdifice(map);
+      if (edifice != null && edifice.def.building != null && edifice.def.building.isNaturalRock)
+      {
+        var blocksDef = GetStonyStuffForRock(edifice.def);
+        if (blocksDef != null) return blocksDef;
+      }
+
+      var floor = cell.GetTerrain(map);
+      if (floor != null)
+      {
+        var stuff = GetStonyStuffForTerrain(roof, floor);
+        if (stuff != null) return stuff;
+      }
+    }
+
+    return DefDatabase<ThingDef>.GetNamed("BlocksGranite");
+  }
+
+  private static ThingDef? GetStonyStuffForRock(ThingDef rockDef)
+  {
+    ThingDef? blocks = GetStonyStuffFromButcherProducts(rockDef);
+    if (blocks != null) return blocks;
+
+    if (rockDef.building?.mineableThing != null)
+    {
+      blocks = GetStonyStuffFromButcherProducts(rockDef.building.mineableThing);
+      if (blocks != null) return blocks;
+    }
+
+    return null;
+  }
+
+  private static ThingDef? GetStonyStuffFromButcherProducts(ThingDef def)
+  {
+    if (def.butcherProducts != null)
+    {
+      foreach (var product in def.butcherProducts)
+      {
+        if (product.thingDef?.stuffProps?.categories?.Contains(StuffCategoryDefOf.Stony) == true)
+        {
+          return product.thingDef;
+        }
+      }
+    }
+    return null;
   }
 }
