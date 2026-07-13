@@ -271,11 +271,13 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     {
       hitPoints[index] = 0;
       var tint = glassTints[index];
-      stuffDefs[index] = null;
       glassTints[index] = null;
       roofsNeedingRepair.Remove(index);
 
+      // Keep the material available while vanilla applies collapse damage. The
+      // collapse-damage patch reads it from this grid for the affected cell.
       RoofCollapserImmediate.DropRoofInCells(cell, map);
+      stuffDefs[index] = null;
 
       map.mapDrawer.MapMeshDirty(cell, MapMeshFlagDefOf.Roofs);
 

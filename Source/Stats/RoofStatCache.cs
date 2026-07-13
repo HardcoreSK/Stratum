@@ -121,6 +121,40 @@ public static class RoofStatCache
   private static readonly Dictionary<int, float> roofStuffDamageThresholdCache = [];
   private static readonly Dictionary<int, float> roofStuffArmorRatingCache = [];
   private static readonly Dictionary<int, int> roofStuffMaxHitPointsCache = [];
+  private static readonly Dictionary<int, float> roofStuffCollapseDamageFactorCache = [];
+
+  /// <summary>
+  /// Scales vanilla thin-roof collapse damage from the total mass of materials used
+  /// by one roof cell. A square-root curve keeps very heavy roofs dangerous without
+  /// making late-game hull plating automatically lethal, while light thatch remains light.
+  /// </summary>
+  public static float GetCollapseDamageFactor(RoofDef def, ThingDef? stuff = null)
+  {
+    int hashKey = def.defNameHash ^ ((stuff?.defNameHash ?? 0) << 16 | (stuff?.defNameHash ?? 0) >> 16);
+    lock (CacheLock)
+    {
+      if (roofStuffCollapseDamageFactorCache.TryGetValue(hashKey, out float factor)) return factor;
+
+      var buildableDef = def.GetModExtension<BuildableRoofExtension>()?.buildableDef;
+      if (buildableDef == null) return 1f;
+
+      float materialMass = 0f;
+      var costs = buildableDef.CostListAdjusted(stuff);
+      if (!costs.NullOrEmpty())
+      {
+        foreach (var cost in costs)
+        {
+          materialMass += cost.count * cost.thingDef.GetStatValueAbstract(StatDefOf.Mass);
+        }
+      }
+
+      // Three kilograms of material per roof cell roughly matches vanilla damage.
+      factor = materialMass > 0f ? Mathf.Sqrt(materialMass / 3f) : 1f;
+      factor = Mathf.Clamp(factor, 0.2f, 3f);
+      roofStuffCollapseDamageFactorCache[hashKey] = factor;
+      return factor;
+    }
+  }
 
   public static float GetBeauty(RoofDef def, ThingDef? stuff = null)
   {
