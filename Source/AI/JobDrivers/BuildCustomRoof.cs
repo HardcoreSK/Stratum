@@ -19,7 +19,7 @@ public class BuildCustomRoof : JobDriver
     return pawn.Reserve(TargetA, job, 1, -1, null, errorOnFailed);
   }
 
-  protected override IEnumerable<Toil> MakeNewToils()
+  public override IEnumerable<Toil> MakeNewToils()
   {
     this.FailOn(() => !pawn.CanReach(TargetA, PathEndMode.Touch, Danger.Deadly));
     this.FailOn(() =>

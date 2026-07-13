@@ -22,7 +22,7 @@ public class BuildCustomRoof : Designator_Build
 
   public Color? SelectedTint => selectedTint;
   public override DrawStyleCategoryDef DrawStyleCategory => DrawStyleCategoryDefOf.Floors;
-  protected override DesignationDef Designation => null!;
+  public override DesignationDef Designation => null!;
 
   public override ThingDef? StuffDef
   {
@@ -98,7 +98,7 @@ public class BuildCustomRoof : Designator_Build
     useMouseIcon = true;
   }
 
-  private void UpdateIcon()
+  private new void UpdateIcon()
   {
     RoofIconUtility.TryExtractIcon(roofDef, ext, ref icon, ref iconTexCoords);
   }

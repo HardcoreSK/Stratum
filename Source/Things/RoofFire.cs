@@ -28,7 +28,7 @@ public class RoofFire : Fire
     }
   }
 
-  protected override void Tick()
+  public override void Tick()
   {
     int ticksSinceSpawn = ticksSinceSpawnRef(this);
     ticksSinceSpawn++;

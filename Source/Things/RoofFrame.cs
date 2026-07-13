@@ -226,7 +226,7 @@ public class RoofFrame : Building, IThingHolder, IConstructible, IHaulEnroute, I
     }
   }
 
-  protected override void DrawAt(Vector3 drawLoc, bool flip = false)
+  public override void DrawAt(Vector3 drawLoc, bool flip = false)
   {
     var s = new Vector3(def.size.x * 1.15f, 1f, def.size.z * 1.15f);
     var m = default(Matrix4x4);

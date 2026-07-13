@@ -299,7 +299,7 @@ public class RetractableRoofConsole : Building
     canopyCells = validCells;
   }
 
-  protected override void Tick()
+  public override void Tick()
   {
     base.Tick();
 
