@@ -21,6 +21,7 @@
 
   <PropertyGroup>
     <RimWorldVersion>1.6</RimWorldVersion>
+    <CombatExtendedAssemblyPath Condition="'$(CombatExtendedAssemblyPath)' == '' and '$(RimWorldModsDir)' != ''">$(RimWorldModsDir)\CombatExtended\Assemblies\CombatExtended.dll</CombatExtendedAssemblyPath>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -48,12 +49,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\ReferenceCode\CombatExtended\Source\CombatExtended\CombatExtended.csproj">
+    <Reference Include="CombatExtended">
+      <HintPath>$(CombatExtendedAssemblyPath)</HintPath>
       <Private>false</Private>
-    </ProjectReference>
+    </Reference>
     <ProjectReference Include="..\..\..\Stratum.csproj">
       <Private>false</Private>
     </ProjectReference>
   </ItemGroup>
+
+  <Target Name="ValidateCombatExtendedReference" BeforeTargets="ResolveReferences" Condition="!Exists('$(CombatExtendedAssemblyPath)')">
+    <Error Text="Set CombatExtendedAssemblyPath to the active CombatExtended.dll, or set RimWorldModsDir to the active Mods directory." />
+  </Target>
 
 </Project>
