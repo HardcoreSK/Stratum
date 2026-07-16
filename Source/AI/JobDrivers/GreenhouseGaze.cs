@@ -45,7 +45,7 @@ public class GreenhouseGaze : JobDriver
     return list;
   }
 
-  public override IEnumerable<Toil> MakeNewToils()
+  protected override IEnumerable<Toil> MakeNewToils()
   {
     yield return Toils_Goto.GotoCell(TargetIndex.A, PathEndMode.OnCell);
 

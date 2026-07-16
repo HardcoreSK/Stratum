@@ -6,6 +6,7 @@ using Verse;
 
 namespace SolarWeb.Stratum.Graphics;
 
+[StaticConstructorOnStartup]
 public class SectionLayer_RoofLightingAndShadows : SectionLayer
 {
   private static Material? roofOverlayMat;

@@ -321,7 +321,7 @@ public class RetractableRoofConsole : Building
     canopyCells = validCells;
   }
 
-  public override void Tick()
+  protected override void Tick()
   {
     base.Tick();
     if (Map == null || !Spawned || Map.roofGrid == null) return;

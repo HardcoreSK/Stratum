@@ -17,7 +17,7 @@ public class SmoothRoof : JobDriver
     return pawn.Reserve(job.targetA, job, 1, -1, ReservationLayerDefOf.Ceiling, errorOnFailed);
   }
 
-  public override IEnumerable<Toil> MakeNewToils()
+  protected override IEnumerable<Toil> MakeNewToils()
   {
     this.FailOn(() => (!job.ignoreDesignations && Map.designationManager.DesignationAt(TargetLocA, DesDef) == null));
     yield return Toils_Goto.GotoCell(TargetIndex.A, PathEndMode.Touch);

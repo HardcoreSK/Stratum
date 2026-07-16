@@ -89,7 +89,7 @@ public class GreenhouseGaze : Tale
     Scribe_Defs.Look(ref weather, "weather");
   }
 
-  public override IEnumerable<Rule> SpecialTextGenerationRules(Dictionary<string, string>? outConstants = null)
+  protected override IEnumerable<Rule> SpecialTextGenerationRules(Dictionary<string, string>? outConstants = null)
   {
     foreach (var rule in base.SpecialTextGenerationRules(outConstants))
     {

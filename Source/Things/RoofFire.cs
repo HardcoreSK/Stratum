@@ -30,7 +30,7 @@ public class RoofFire : Fire
     }
   }
 
-  public override void DrawAt(Vector3 drawLoc, bool flip = false)
+  protected override void DrawAt(Vector3 drawLoc, bool flip = false)
   {
     if (Find.PlaySettings.showRoofOverlay)
     {
@@ -38,7 +38,7 @@ public class RoofFire : Fire
     }
   }
 
-  public override void TickInterval(int delta)
+  protected override void TickInterval(int delta)
   {
     int ticksSinceSpawn = ticksSinceSpawnRef(this);
     ticksSinceSpawn += delta;

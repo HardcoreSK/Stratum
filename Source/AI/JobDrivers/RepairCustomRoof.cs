@@ -19,7 +19,7 @@ public class RepairCustomRoof : JobDriver
     return pawn.Reserve(Cell, job, 1, -1, null, errorOnFailed);
   }
 
-  public override IEnumerable<Toil> MakeNewToils()
+  protected override IEnumerable<Toil> MakeNewToils()
   {
     this.FailOn(() => !pawn.CanReach(Cell, PathEndMode.Touch, Danger.Deadly));
     this.FailOn(() => pawn.Faction == Faction.OfPlayer && !pawn.Map.areaManager.Home[Cell] && !job.playerForced);
