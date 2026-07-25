@@ -3,12 +3,14 @@ using HarmonyLib;
 using RimWorld;
 using SolarWeb.Stratum.AI.Designators;
 using SolarWeb.Stratum.DefModExtensions;
+using SolarWeb.Stratum.Things;
 using SolarWeb.Stratum.UI;
 using Verse;
 
 namespace SolarWeb.Stratum.HSK;
 
 [StaticConstructorOnStartup]
+[HarmonyPatch]
 public static class BuildableRoofPatch
 {
   private const string ThickRoofRemovalResearchDefName = "ThickStoneRoofRemoval";
@@ -59,6 +61,22 @@ public static class BuildableRoofPatch
     }
 
     return true;
+  }
+
+  [HarmonyPatch(
+    typeof(TrashUtility),
+    nameof(TrashUtility.ShouldTrashBuilding),
+    new[] { typeof(Building) })]
+  [HarmonyPrefix]
+  public static bool IgnoreRoofFramesForRaidTrash(Building b, ref bool __result)
+  {
+    if (b is not RoofFrame)
+    {
+      return true;
+    }
+
+    __result = false;
+    return false;
   }
 
   [HarmonyPatch(typeof(SelectedRoof), nameof(SelectedRoof.GetGizmos))]

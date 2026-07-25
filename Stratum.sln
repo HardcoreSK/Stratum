@@ -27,6 +27,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "1.6", "1.6", "{07A456F7-78F
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stratum_TiltThePlanet", "Source_Compat\sjaandi.realtiltmod\1.6\Stratum_TiltThePlanet.csproj", "{2D153FF6-2E44-4988-B8DE-475333ACEBEF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "skyarkhangel.hsk", "Source_Compat\skyarkhangel.hsk\skyarkhangel.hsk.csproj", "{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +99,18 @@ Global
 		{2D153FF6-2E44-4988-B8DE-475333ACEBEF}.Release|x64.Build.0 = Release|Any CPU
 		{2D153FF6-2E44-4988-B8DE-475333ACEBEF}.Release|x86.ActiveCfg = Release|Any CPU
 		{2D153FF6-2E44-4988-B8DE-475333ACEBEF}.Release|x86.Build.0 = Release|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Debug|x64.Build.0 = Debug|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Debug|x86.Build.0 = Debug|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Release|x64.ActiveCfg = Release|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Release|x64.Build.0 = Release|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Release|x86.ActiveCfg = Release|Any CPU
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -112,6 +126,7 @@ Global
 		{62C57815-108B-A95E-9D73-458D69D07988} = {21FFD3C1-EE46-F538-0E2F-9AB282964A95}
 		{07A456F7-78F2-6891-E38C-262ABEA63199} = {62C57815-108B-A95E-9D73-458D69D07988}
 		{2D153FF6-2E44-4988-B8DE-475333ACEBEF} = {07A456F7-78F2-6891-E38C-262ABEA63199}
+		{A7D5EE5C-9FE8-416C-8DB5-111BD781B56D} = {21FFD3C1-EE46-F538-0E2F-9AB282964A95}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6271CF5C-6679-42C7-93BD-436EA57AE909}

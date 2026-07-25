@@ -14,7 +14,7 @@
     <Optimize>True</Optimize>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
-    <OutputPath>..\..\Mod\Compat\skyarkhangel.hsk\$(RimWorldVersion)\Assemblies\</OutputPath>
+    <BuildProjectReferences>false</BuildProjectReferences>
   </PropertyGroup>
 
 
@@ -25,5 +25,6 @@
     <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.*" />
     <PackageReference Include="Lib.Harmony.Ref" Version="2.4.*" />
   </ItemGroup>
+  <Import Project="Properties/OutputPath.props" Condition="Exists('Properties/OutputPath.props')" />
 
 </Project>
