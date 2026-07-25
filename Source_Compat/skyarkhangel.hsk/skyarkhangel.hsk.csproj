@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <OutputType>Library</OutputType>
+    <RootNamespace>SolarWeb.Stratum.HSK</RootNamespace>
+    <AssemblyName>SolarWeb.Stratum.HSK</AssemblyName>
+    <TargetFramework>net48</TargetFramework>
+    <RimWorldVersion>1.6</RimWorldVersion>
+    <LangVersion>preview</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Optimize>True</Optimize>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <OutputPath>..\..\Mod\Compat\skyarkhangel.hsk\$(RimWorldVersion)\Assemblies\</OutputPath>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="../../Stratum.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.*" />
+    <PackageReference Include="Lib.Harmony.Ref" Version="2.4.*" />
+  </ItemGroup>
+
+</Project>
