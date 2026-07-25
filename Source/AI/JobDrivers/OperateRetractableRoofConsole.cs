@@ -16,7 +16,7 @@ public class OperateRetractableRoofConsole : JobDriver
     return pawn.Reserve(Console, job, 1, -1, null, errorOnFailed);
   }
 
-  public override IEnumerable<Toil> MakeNewToils()
+  protected override IEnumerable<Toil> MakeNewToils()
   {
     this.FailOnDespawnedNullOrForbidden(TargetIndex.A);
     this.FailOn(() => Console.GetComp<CompPowerTrader>() != null && !Console.GetComp<CompPowerTrader>().PowerOn);

@@ -40,7 +40,7 @@ public class RoofOnFire : Alert_Critical
     return AlertReport.CulpritsAre(roofFiresResult);
   }
 
-  public override void OnClick()
+  protected override void OnClick()
   {
     base.OnClick();
     Find.PlaySettings.showRoofOverlay = true;

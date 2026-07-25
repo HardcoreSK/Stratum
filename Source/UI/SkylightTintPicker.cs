@@ -38,11 +38,11 @@ public class SkylightTintPicker : Dialog_ColorPickerBase
     new Color(0.2f, 0.2f, 0.2f)  // Dark
   ];
 
-  public override bool ShowDarklight => false;
-  public override Color DefaultColor => defaultColor;
-  public override List<Color> PickableColors => Palette;
-  public override float ForcedColorValue => 1f;
-  public override bool ShowColorTemperatureBar => false;
+  protected override bool ShowDarklight => false;
+  protected override Color DefaultColor => defaultColor;
+  protected override List<Color> PickableColors => Palette;
+  protected override float ForcedColorValue => 1f;
+  protected override bool ShowColorTemperatureBar => false;
 
   public SkylightTintPicker(Color initialColor, Color defaultColor, Action<Color> callback)
     : base(Widgets.ColorComponents.All, Widgets.ColorComponents.All)
@@ -53,7 +53,7 @@ public class SkylightTintPicker : Dialog_ColorPickerBase
     this.callback = callback;
   }
 
-  public override void SaveColor(Color color)
+  protected override void SaveColor(Color color)
   {
     callback?.Invoke(color);
   }

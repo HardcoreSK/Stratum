@@ -30,7 +30,7 @@ public class BuildCustomRoof : Designator_Build
     }
   }
   public override DrawStyleCategoryDef DrawStyleCategory => DrawStyleCategoryDefOf.Floors;
-  public override DesignationDef Designation => null!;
+  protected override DesignationDef Designation => null!;
 
   public override ThingDef? StuffDef
   {
@@ -106,7 +106,7 @@ public class BuildCustomRoof : Designator_Build
     useMouseIcon = true;
   }
 
-  private new void UpdateIcon()
+  private void UpdateIcon()
   {
     RoofIconUtility.TryExtractIcon(roofDef, ext, ref icon, ref iconTexCoords);
   }

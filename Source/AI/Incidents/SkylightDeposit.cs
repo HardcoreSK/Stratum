@@ -10,7 +10,7 @@ namespace SolarWeb.Stratum.AI.Incidents;
 
 public class SkylightDeposit : IncidentWorker
 {
-  public override bool CanFireNowSub(IncidentParms parms)
+  protected override bool CanFireNowSub(IncidentParms parms)
   {
     if (!SolarWeb.Stratum.Stratum.Settings.enableSkylightCoating) return false;
     Map map = (Map)parms.target;
@@ -22,7 +22,7 @@ public class SkylightDeposit : IncidentWorker
     return TryFindCandidateRoom(map, out _);
   }
 
-  public override bool TryExecuteWorker(IncidentParms parms)
+  protected override bool TryExecuteWorker(IncidentParms parms)
   {
     Map map = (Map)parms.target;
     if (map == null) return false;

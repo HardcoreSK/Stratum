@@ -5,7 +5,7 @@ namespace SolarWeb.Stratum.Thoughts;
 
 public class ThoughtWorker_Skylight : ThoughtWorker
 {
-  public override ThoughtState CurrentStateInternal(Pawn p)
+  protected override ThoughtState CurrentStateInternal(Pawn p)
   {
     if (!p.Spawned || !p.Awake())
     {

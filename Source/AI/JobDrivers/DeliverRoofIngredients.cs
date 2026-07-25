@@ -29,7 +29,7 @@ public class DeliverRoofIngredients : JobDriver
     return true;
   }
 
-  public override IEnumerable<Toil> MakeNewToils()
+  protected override IEnumerable<Toil> MakeNewToils()
   {
     this.FailOn(() => CurrentFrame == null || CurrentFrame.Faction != pawn.Faction || CurrentFrame.IsForbidden(pawn));
 
