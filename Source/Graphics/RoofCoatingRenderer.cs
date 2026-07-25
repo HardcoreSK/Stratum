@@ -66,7 +66,7 @@ public class RoofCoatingRenderer : SectionLayer
   {
     ClearSubMeshes(MeshParts.All);
 
-    Map map = base.Map;
+    Map map = Map;
     if (map == null || map.roofGrid == null || map.fogGrid == null) return;
 
     var skylightDirt = map.GetComponent<MapComponents.SkylightCoating>();
@@ -105,26 +105,31 @@ public class RoofCoatingRenderer : SectionLayer
 
       if (RoofStatCache.IsSkylight(roof))
       {
-        float dirt = skylightDirt.GetDirtLevel(c);
-        if (dirt > 0.01f)
+        Building edifice = c.GetEdifice(map);
+        if (edifice != null && edifice.def.staticSunShadowHeight > 0f) continue;
+
+        if (Stratum.Settings.enableDirtGraphics)
         {
-          Color dirtCol = DustColor;
-          dirtCol.a = dirt * 0.95f;
-          Material dMat = DirtMats[Mathf.Abs(c.GetHashCode()) % DirtMats.Length];
-          DrawQuadCustom(new Vector3(c.x + 0.5f, altitude + 0.02f, c.z + 0.5f), Vector2.one, dMat, dirtCol, Rot4.North);
+          float dirt = skylightDirt.GetDirtLevel(c);
+          if (dirt > 0.01f)
+          {
+            Material dMat = DirtMats[Mathf.Abs(c.GetHashCode()) % DirtMats.Length];
+            DrawCoatingElement(c, altitude + 0.02f, dMat, DustColor, dirt, 3123512);
+          }
         }
 
-        float pollen = skylightDirt.GetPollenLevel(c);
-        if (pollen > 0.01f)
+        if (Stratum.Settings.enablePollenGraphics)
         {
-          Color pollenCol = PollenColor;
-          pollenCol.a = pollen * 0.95f;
-          Material pMat = DirtMats[Mathf.Abs(c.GetHashCode()) % DirtMats.Length];
-          DrawQuadCustom(new Vector3(c.x + 0.5f, altitude + 0.025f, c.z + 0.5f), Vector2.one, pMat, pollenCol, Rot4.North);
+          float pollen = skylightDirt.GetPollenLevel(c);
+          if (pollen > 0.01f)
+          {
+            Material pMat = DirtMats[Mathf.Abs(c.GetHashCode()) % DirtMats.Length];
+            DrawCoatingElement(c, altitude + 0.025f, pMat, PollenColor, pollen, 9845123);
+          }
         }
       }
 
-      if (RoofStatCache.IsVisibleRoof(roof))
+      if (RoofStatCache.IsVisibleRoof(roof) && Stratum.Settings.enableSnowGraphics)
       {
         float alphaBL = (GetSnow(c.x, c.z) + GetSnow(c.x - 1, c.z) + GetSnow(c.x, c.z - 1) + GetSnow(c.x - 1, c.z - 1)) / 4f;
         float alphaTL = (GetSnow(c.x, c.z) + GetSnow(c.x - 1, c.z) + GetSnow(c.x, c.z + 1) + GetSnow(c.x - 1, c.z + 1)) / 4f;
@@ -180,6 +185,24 @@ public class RoofCoatingRenderer : SectionLayer
     }
 
     FinalizeMesh(MeshParts.All);
+  }
+
+  private void DrawCoatingElement(IntVec3 c, float finalAltitude, Material mat, Color baseColor, float amount, int seedOffset)
+  {
+    Rand.PushState(c.GetHashCode() ^ seedOffset);
+    float offsetX = Rand.Range(-0.15f, 0.15f);
+    float offsetZ = Rand.Range(-0.15f, 0.15f);
+    float scaleX = Rand.Range(0.8f, 1.2f);
+    float scaleZ = Rand.Range(0.8f, 1.2f);
+    Rot4 rot = new(Rand.RangeInclusive(0, 3));
+    bool flipUv = Rand.Value < 0.5f;
+    Rand.PopState();
+
+    Color col = baseColor;
+    col.a = amount * 0.95f;
+
+    Vector2[]? uvArray = flipUv ? [new(1f, 0f), new(1f, 1f), new(0f, 1f), new(0f, 0f)] : null;
+    DrawQuadCustom(new Vector3(c.x + 0.5f + offsetX, finalAltitude, c.z + 0.5f + offsetZ), new Vector2(scaleX, scaleZ), mat, col, rot, uvArray);
   }
 
   private void DrawQuadCustom(Vector3 center, Vector2 size, Material mat, Color color, Rot4 rot, Vector2[]? uvArray = null, Color[]? vertexColors = null)
