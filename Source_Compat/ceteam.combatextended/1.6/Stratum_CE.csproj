@@ -6,6 +6,7 @@
     <OutputType>Library</OutputType>
     <RootNamespace>SolarWeb.Stratum.CE</RootNamespace>
     <AssemblyName>SolarWeb.Stratum.CE</AssemblyName>
+    <RimWorldVersion>1.6</RimWorldVersion>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>12.0</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -19,8 +20,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
 
+  <!-- Set your own RimWorldModsDir in OutputPath.props-->
+  <Import Project="Properties/OutputPath.props" Condition="Exists('Properties/OutputPath.props')" />
   <PropertyGroup>
-    <RimWorldVersion>1.6</RimWorldVersion>
     <CombatExtendedAssemblyPath Condition="'$(CombatExtendedAssemblyPath)' == '' and '$(RimWorldModsDir)' != ''">$(RimWorldModsDir)\CombatExtended\Assemblies\CombatExtended.dll</CombatExtendedAssemblyPath>
   </PropertyGroup>
 

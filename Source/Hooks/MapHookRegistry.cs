@@ -130,6 +130,71 @@ public class MapHookRegistry : MapComponent
     return null;
   }
 
+  public static bool TryCalculateRoofDamage(
+    Map map,
+    RoofDef roofDef,
+    ThingDef? stuffDef,
+    float baseDamage,
+    float penetration,
+    DamageInfo? damageInfo,
+    ref float effectiveDamage)
+  {
+    var globalHandlers = GetGlobalHandlers<RoofDamageCalculationHandler>(HookId.RoofDamageCalculation);
+    if (TryInvokeRoofDamageHandlers(
+      globalHandlers,
+      roofDef,
+      stuffDef,
+      baseDamage,
+      penetration,
+      damageInfo,
+      ref effectiveDamage))
+    {
+      return true;
+    }
+
+    var instanceHandlers = Get(map)?.GetHandlers<RoofDamageCalculationHandler>(HookId.RoofDamageCalculation);
+    return TryInvokeRoofDamageHandlers(
+      instanceHandlers,
+      roofDef,
+      stuffDef,
+      baseDamage,
+      penetration,
+      damageInfo,
+      ref effectiveDamage);
+  }
+
+  private static bool TryInvokeRoofDamageHandlers(
+    List<RoofDamageCalculationHandler>? handlers,
+    RoofDef roofDef,
+    ThingDef? stuffDef,
+    float baseDamage,
+    float penetration,
+    DamageInfo? damageInfo,
+    ref float effectiveDamage)
+  {
+    if (handlers == null)
+    {
+      return false;
+    }
+
+    for (int i = 0; i < handlers.Count; i++)
+    {
+      try
+      {
+        if (handlers[i](roofDef, stuffDef, baseDamage, penetration, damageInfo, ref effectiveDamage))
+        {
+          return true;
+        }
+      }
+      catch (Exception ex)
+      {
+        StratumLog.Error($"Error in RoofDamageCalculation handler: {ex}");
+      }
+    }
+
+    return false;
+  }
+
   public static float GetCellThermalConductivity(Map map, IntVec3 cell, float baseConductivity)
   {
     float current = baseConductivity;
