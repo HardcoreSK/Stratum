@@ -43,6 +43,8 @@ public class RoofConstructionTracker(Map map) : MapComponent(map)
 
   public void RebuildRoof(IntVec3 cell, RoofDef roofDef, BuildableRoofExtension ext, ThingDef? stuff = null, UnityEngine.Color? glassTint = null)
   {
+    if (ext.buildableDef != null && !ext.buildableDef.IsResearchFinished) return;
+
     RemoveRecord(cell);
 
     float workToBuild = 1000f;
@@ -103,6 +105,12 @@ public class RoofConstructionTracker(Map map) : MapComponent(map)
       {
         map.roofGrid.SetRoof(cell, rec.roofDef);
       }
+      
+      if (Find.PlaySettings != null && Find.PlaySettings.autoHomeArea && map.areaManager.Home != null)
+      {
+        map.areaManager.Home[cell] = true;
+      }
+
       map.GetComponent<RoofIntegrityGrid>()?.InitializeRoof(cell, rec.roofDef, rec.stuffDef, rec.glassTint);
 
       RemoveRecord(cell);

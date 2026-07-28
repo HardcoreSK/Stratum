@@ -230,9 +230,6 @@
     </costList>
     <uiOrder>2050</uiOrder>
     <constructionSkillPrerequisite>6</constructionSkillPrerequisite>
-    <researchPrerequisites>
-      <li>SolarPanels</li>
-    </researchPrerequisites>
   </ThingDef>
 
   <SolarWeb.Stratum.Defs.StratumRoofDef>
@@ -250,7 +247,6 @@
           <isSeamless>true</isSeamless>
           <color>(0.1, 0.1, 0.2)</color>
         </graphicData>
-        <designationCategory>SolarWeb-Stratum-Roofs</designationCategory>
         <isSkylight>false</isSkylight>
         <allowRooftopAttachments>false</allowRooftopAttachments>
       </li>
