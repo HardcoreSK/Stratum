@@ -1,11 +1,12 @@
-using System.Collections.Generic;
 using RimWorld;
-using Verse;
-using Verse.AI;
-
 using SolarWeb.Stratum.DefModExtensions;
 using SolarWeb.Stratum.MapComponents;
 using SolarWeb.Stratum.Things;
+using SolarWeb.Stratum.Utilities;
+using System.Collections.Generic;
+using UnityEngine;
+using Verse;
+using Verse.AI;
 
 namespace SolarWeb.Stratum.AI.JobDrivers;
 
@@ -33,9 +34,27 @@ public class BuildCustomRoof : JobDriver
     yield return Toils_Goto.GotoThing(TargetIndex.A, PathEndMode.Touch);
 
     var build = ToilMaker.MakeToil("MakeNewToils");
+
+    #region HSK
+
+    cachedTracker = pawn.Map.GetComponent<RoofConstructionTracker>();
+    if (cachedTracker != null && cachedTracker.TryGetRecord(Cell, out var rec))
+    {
+        RoofDef roofDef = rec.roofDef;
+        var ext = rec.roofDef.GetModExtension<BuildableRoofExtension>();
+
+        build.PlaySustainerOrSound(ext?.sustainerSound ?? DefOf.SoundDefOf.Interact_ConstructMetal);
+        build.PlaySoundAtEnd(ext?.finishSound ?? SoundDefOf.Roof_Finish);
+
+        if (ext?.workEffect != null)
+            build.WithEffect(ext.workEffect, TargetIndex.A);
+        else
+            build.WithEffect(EffecterDefOf.RoofWork, TargetIndex.A);
+    }
+    #endregion
+
     build.initAction = () =>
       {
-        cachedTracker = pawn.Map.GetComponent<RoofConstructionTracker>();
         if (cachedTracker == null || !cachedTracker.TryGetRecord(Cell, out _))
         {
           EndJobWith(JobCondition.Incompletable);
@@ -77,7 +96,7 @@ public class BuildCustomRoof : JobDriver
     build.activeSkill = () => SkillDefOf.Construction;
     build.handlingFacing = true;
 
-    build.WithProgressBar(TargetIndex.A, () =>
+	build.WithProgressBar(TargetIndex.A, () =>
     {
       if (cachedTracker != null && cachedTracker.TryGetRecord(Cell, out var rec))
         return rec.workDone / rec.workTotal;

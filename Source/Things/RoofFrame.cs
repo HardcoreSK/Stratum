@@ -1,13 +1,13 @@
-using System.Collections.Generic;
-using System.Text;
 using RimWorld;
-using UnityEngine;
-using Verse;
-
 using SolarWeb.Stratum.DefModExtensions;
 using SolarWeb.Stratum.Graphics;
 using SolarWeb.Stratum.MapComponents;
 using SolarWeb.Stratum.Stats;
+using SolarWeb.Stratum.Utilities;
+using System.Collections.Generic;
+using System.Text;
+using UnityEngine;
+using Verse;
 
 namespace SolarWeb.Stratum.Things;
 
@@ -29,15 +29,45 @@ public class RoofFrame : Building, IThingHolder, IConstructible, IHaulEnroute, I
   private static readonly Texture2D ProgressTex =
     ContentFinder<Texture2D>.Get(RimWorldTextures.UI.Designators.BuildRoofArea);
 
-  private Material CornerMat => cachedCornerMat ??=
-    MaterialPool.MatFrom(CornerTex, ShaderDatabase.MetaOverlay, DrawColor);
+  private static readonly Material CornerMat =
+    MaterialPool.MatFrom(CornerTex, ShaderDatabase.MetaOverlay, Color.white); //HSK
   private Material ProgressMat => cachedTileMat ??=
     MaterialPool.MatFrom(ProgressTex, ShaderDatabase.Transparent, Color.white);
 
   private static readonly MaterialPropertyBlock PropertyBlock = new();
   private static readonly int MainTexSTID = Shader.PropertyToID("_MainTex_ST");
   private static readonly int ColorID = Shader.PropertyToID("_Color");
-  private static readonly Color BlueprintColor = new(0.13f, 0.35f, 0.44f, 0.45f);
+  private static readonly Color BlueprintColor = new(0.13f, 0.35f, 0.44f, 0.2f);
+
+  #region HSK
+    
+  private int fadeStartTick;
+  private bool lastShowState;
+
+  private float GetFrameOpacity()
+  {
+      if (Find.PlaySettings.showRoofOverlay)
+          return 1f;
+
+      const int showTicks = 180;   // 3 seconds
+      const int fadeTicks = 60;    // 1 second
+
+      int age = Find.TickManager.TicksGame - fadeStartTick;
+
+      if (age <= showTicks)
+          return 1f;
+
+      float t = Mathf.Clamp01((age - showTicks) / (float)fadeTicks);
+      return Mathf.Lerp(1f, 0f, t);
+  }
+
+  public override void SpawnSetup(Map map, bool respawningAfterLoad)
+  {
+      base.SpawnSetup(map, respawningAfterLoad);
+
+      fadeStartTick = Find.TickManager.TicksGame;
+  }
+  #endregion
 
   private float MaterialProgress
   {
@@ -175,16 +205,19 @@ public class RoofFrame : Building, IThingHolder, IConstructible, IHaulEnroute, I
       yield return c;
     }
 
+    var map = Map; //HSK avoid NRE when cancelling lots of roof frames at once
+    var pos = Position;
+
     yield return new Command_Action
     {
-      defaultLabel = "CommandCancelConstructionLabel".Translate(),
-      defaultDesc = "CommandCancelConstructionDesc".Translate(),
-      icon = ContentFinder<Texture2D>.Get("UI/Designators/Cancel"),
-      hotKey = KeyBindingDefOf.Designator_Cancel,
-      action = delegate
-      {
-        Map.GetComponent<RoofConstructionTracker>().RemoveRecord(Position, DestroyMode.Refund);
-      }
+        defaultLabel = "CommandCancelConstructionLabel".Translate(),
+        defaultDesc = "CommandCancelConstructionDesc".Translate(),
+        icon = ContentFinder<Texture2D>.Get("UI/Designators/Cancel"),
+        hotKey = RimWorld.KeyBindingDefOf.Designator_Cancel,
+        action = delegate
+        {
+            map?.GetComponent<RoofConstructionTracker>()?.RemoveRecord(pos, DestroyMode.Refund);
+        }
     };
   }
 
@@ -228,12 +261,17 @@ public class RoofFrame : Building, IThingHolder, IConstructible, IHaulEnroute, I
 
   protected override void DrawAt(Vector3 drawLoc, bool flip = false)
   {
-    var s = new Vector3(def.size.x * 1.15f, 1f, def.size.z * 1.15f);
+	#region HSK
+	bool show = Find.PlaySettings.showRoofOverlay;
+
+    float alpha = GetFrameOpacity();
+	#endregion
+	var s = new Vector3(def.size.x * 1.15f, 1f, def.size.z * 1.15f);
     var m = default(Matrix4x4);
     m.SetTRS(drawLoc, Rotation.AsQuat, s);
 
     PropertyBlock.Clear();
-    PropertyBlock.SetColor(ColorID, DrawColor.ToTransparent(0.5f));
+    PropertyBlock.SetColor(ColorID, DrawColor.ToTransparent(0.15f * alpha)); // HSK
     UnityEngine.Graphics.DrawMesh(MeshPool.plane10, m, UnderfieldMat, 0, null, 0, PropertyBlock);
 
     float cornerSize = Mathf.Min(RotatedSize.x, RotatedSize.z) * 0.38f;
@@ -251,21 +289,26 @@ public class RoofFrame : Building, IThingHolder, IConstructible, IHaulEnroute, I
       cm.SetTRS(drawLoc + Vector3.up * 0.03f + offset,
                 new Rot4(i).AsQuat,
                 new Vector3(cornerSize, 1f, cornerSize));
-      UnityEngine.Graphics.DrawMesh(MeshPool.plane10, cm, CornerMat, 0);
-    }
+      #region HSK
+      PropertyBlock.Clear();
+      PropertyBlock.SetColor(ColorID, DrawColor.ToTransparent(0.3f * alpha));
 
-    float matProgress = MaterialProgress;
+      UnityEngine.Graphics.DrawMesh(MeshPool.plane10,cm,CornerMat,0,null,0,PropertyBlock);
+      #endregion
+	  }
+
+		float matProgress = MaterialProgress;
     float workProgress = WorkProgress;
 
     if (matProgress > 0.01f)
     {
       float displayProgress = (matProgress < 1f) ? matProgress : 1f;
-      DrawFill(drawLoc + Vector3.up * 0.01f, displayProgress, BlueprintColor, scroll: false);
+      DrawFill(drawLoc + Vector3.up * 0.01f, displayProgress, BlueprintColor.WithAlpha(BlueprintColor.a * alpha), scroll: false); // HSK
     }
 
     if (workProgress > 0.01f)
     {
-      DrawFill(drawLoc + Vector3.up * 0.02f, workProgress, DrawColor, scroll: true);
+      DrawFill(drawLoc + Vector3.up * 0.02f, workProgress, DrawColor.ToTransparent(0.3f), scroll: true);
     }
 
     Comps_PostDraw();

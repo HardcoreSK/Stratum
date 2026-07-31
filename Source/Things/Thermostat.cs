@@ -31,7 +31,7 @@ public class Thermostat : Building
       defaultLabel = "Stratum_ReconnectRoofNet".Translate(),
       defaultDesc = "Stratum_ReconnectRoofNetDesc".Translate(),
       icon = ContentFinder<Texture2D>.Get("UI/Commands/TryReconnect", true),
-      hotKey = KeyBindingDefOf.Misc1
+      hotKey = RimWorld.KeyBindingDefOf.Misc1
     };
   }
   public override void SpawnSetup(Map map, bool respawningAfterLoad)

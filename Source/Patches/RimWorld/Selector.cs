@@ -1,15 +1,16 @@
-using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
+using SolarWeb.Stratum.Stats;
+using SolarWeb.Stratum.Things;
+using SolarWeb.Stratum.UI;
+using SolarWeb.Stratum.Utilities;
+using SolarWeb.Stratum.WorldComponents;
+using System.Collections.Generic;
+using System.Linq;
 using Verse;
 using Verse.Sound;
 
-using SolarWeb.Stratum.Stats;
-using SolarWeb.Stratum.UI;
-using SolarWeb.Stratum.WorldComponents;
-using SolarWeb.Stratum.Utilities;
 using SolarWeb.Stratum.DefModExtensions;
-
 namespace SolarWeb.Stratum.Patches;
 
 [HarmonyPatch(typeof(Selector))]
@@ -63,6 +64,10 @@ public static class Selector_Patch
   public static void SelectableObjectsUnderMouse_Postfix(ref IEnumerable<object> __result)
   {
     if (__result == null) return;
+
+    __result = __result.Where(obj =>
+        Find.PlaySettings.showRoofOverlay || obj is not RoofFrame); //HSK
+
     if (!Find.PlaySettings.showRoofOverlay) return;
 
     if (Find.ColonistBar != null)
@@ -94,7 +99,12 @@ public static class Selector_Patch
   [HarmonyPostfix]
   public static void SelectableObjectsAt_Postfix(ref IEnumerable<object> __result, IntVec3 c, Map map)
   {
+
     if (__result == null) return;
+
+    __result = __result.Where(obj =>
+        Find.PlaySettings.showRoofOverlay || obj is not RoofFrame); // HSK
+
     if (!Find.PlaySettings.showRoofOverlay) return;
     if (map == null || map.roofGrid == null) return;
     if (!c.InBounds(map)) return;
@@ -108,6 +118,22 @@ public static class Selector_Patch
 
     var roofObj = pool.Get(map, c, roof);
     __result = YieldRoofAndOriginal(roofObj, __result);
+  }
+
+  [HarmonyPatch(typeof(ThingSelectionUtility), nameof(ThingSelectionUtility.MultiSelectableThingsInScreenRectDistinct))] //HSK
+  public static class ThingSelectionUtility_Patch
+  {
+      [HarmonyPostfix]
+      public static void MultiSelectableThingsInScreenRectDistinct_Postfix(ref IEnumerable<Thing> __result)
+      {
+          if (__result == null)
+              return;
+
+          if (Find.PlaySettings.showRoofOverlay)
+              return;
+
+          __result = __result.Where(t => t is not RoofFrame);
+      }
   }
 
   [HarmonyPatch(typeof(Selector), "SelectInternal")]

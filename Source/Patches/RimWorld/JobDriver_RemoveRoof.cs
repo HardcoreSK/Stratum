@@ -1,8 +1,11 @@
-using System.Runtime.CompilerServices;
 using HarmonyLib;
 using RimWorld;
-
+using SolarWeb.Stratum.AI.PlaceWorkers;
+using SolarWeb.Stratum.DefModExtensions;
+using SolarWeb.Stratum.DefOf;
 using SolarWeb.Stratum.Utilities;
+using System.Runtime.CompilerServices;
+using Verse;
 
 namespace SolarWeb.Stratum.Patches;
 
@@ -32,7 +35,7 @@ public static class JobDriver_RemoveRoof_Patch
 
   [HarmonyPatch("DoEffect")]
   [HarmonyPrefix]
-  public static void DoEffect_Prefix()
+  public static void DoEffect_Prefix(JobDriver_RemoveRoof __instance)
   {
     RoofBuildings.isDeconstructingRoof = true;
   }

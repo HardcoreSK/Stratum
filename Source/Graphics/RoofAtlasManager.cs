@@ -87,6 +87,23 @@ public static class RoofAtlasManager
     }
   }
 
+  public static void UpdateLighting(float skyGlow)
+  {
+    foreach (var kvp in materialColorCache)
+    {
+        Color baseColor = kvp.Key.Item2;
+        Color lit = new(baseColor.r * skyGlow,baseColor.g * skyGlow,baseColor.b * skyGlow,baseColor.a);
+
+      kvp.Value.cutout.color = lit;
+      kvp.Value.transparent.color = lit;
+    }
+
+    foreach (var kvp in metaOverlayCache)
+    {
+      kvp.Value.color = new Color(skyGlow, skyGlow, skyGlow, 1f);
+    }
+  }
+
   public static AtlasEntry GetOrCreateEntry(string path)
   {
     if (path.NullOrEmpty())

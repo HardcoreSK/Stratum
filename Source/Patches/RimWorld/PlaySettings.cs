@@ -1,8 +1,9 @@
 using HarmonyLib;
-using Verse;
 using RimWorld;
 using SolarWeb.Stratum.Hooks;
 using SolarWeb.Stratum.Utilities;
+using Verse;
+using Verse.Sound;
 
 namespace SolarWeb.Stratum.Patches;
 
@@ -44,5 +45,30 @@ public static class PlaySettings_Patch
     {
       StratumLog.Error($"Error in built-in DoMapControls: {ex}");
     }
+
+    RoofBuildings.DoMapControls(row);
+
+    bool before = Find.PlaySettings.showRoofOverlay;
+
+    CheckKeyBindingToggle(
+        KeyBindingDefOf.ToggleRoofVisibility,
+        ref Find.PlaySettings.showRoofOverlay);
+
+    if (Find.CurrentMap != null && before != RoofBuildings.showRoofBuildings)
+    {
+        RoofBuildings.DirtyAllRoofBuildingCells(Find.CurrentMap);
+    }
+
   }
+
+private static void CheckKeyBindingToggle(KeyBindingDef keyBinding, ref bool value)
+{
+    if (!keyBinding.KeyDownEvent)
+    return;
+    value = !value;
+    if (value)
+    SoundDefOf.Checkbox_TurnedOn.PlayOneShotOnCamera();
+    else
+    SoundDefOf.Checkbox_TurnedOff.PlayOneShotOnCamera();
+}
 }

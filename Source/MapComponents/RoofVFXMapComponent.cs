@@ -1,10 +1,10 @@
-using System.Collections.Generic;
 using RimWorld;
+using SolarWeb.Stratum.Graphics;
+using SolarWeb.Stratum.Hooks;
+using SolarWeb.Stratum.Stats;
+using System.Collections.Generic;
 using UnityEngine;
 using Verse;
-
-using SolarWeb.Stratum.Stats;
-using SolarWeb.Stratum.Hooks;
 
 namespace SolarWeb.Stratum.MapComponents;
 
@@ -174,13 +174,13 @@ public class RoofVFXMapComponent : MapComponent
   public override void MapComponentTick()
   {
     if (map.skyManager == null) return;
-    float curSkyGlow = map.skyManager.CurSkyGlow;
+    float curSkyGlow = Mathf.Max(0.2f,map.skyManager.CurSkyGlow); //HSK - The below comment was for the skylight, but it doesnt stop roofs from being glow in the dark at night. Also we arent regenerating, just updating values of an already passed material. If im wrong, just remove.
+    RoofAtlasManager.UpdateLighting(curSkyGlow);
 
     // No sky-glow-based mesh dirtying: the lighting overlay bakes nothing time-of-day
     // dependent (the sky term animates via the material color), so regenerating sections as
     // the sky changes is wasted work — and sections regenerating at different times produced
     // stale seams and mismatched section brightness.
-
     if (Find.TickManager.TicksGame % TickInterval == 0 && transparentCells.Count > 0)
     {
       if (curSkyGlow >= MinSunlight)

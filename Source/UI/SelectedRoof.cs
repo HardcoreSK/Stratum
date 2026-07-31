@@ -85,7 +85,7 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
         defaultDesc = "CommandBuildCopyDesc".Translate(),
         icon = designator.icon,
         iconTexCoords = designator.iconTexCoords,
-        hotKey = KeyBindingDefOf.Misc11,
+        hotKey = RimWorld.KeyBindingDefOf.Misc11,
         roofDef = def,
         stuffDef = stuff,
         selectedTint = tint,
@@ -122,7 +122,7 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
 
         map.areaManager.NoRoof[cell] = true;
       },
-      hotKey = KeyBindingDefOf.Designator_Deconstruct
+      hotKey = RimWorld.KeyBindingDefOf.Designator_Deconstruct
     };
 
     if (map.areaManager.NoRoof[cell])
@@ -133,7 +133,7 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
         defaultLabel = "Stratum_CancelRoofRemoval".Translate(),
         defaultDesc = "Stratum_CancelRoofRemovalDesc".Translate(),
         icon = ContentFinder<Texture2D>.Get("UI/Designators/Cancel"),
-        hotKey = KeyBindingDefOf.Designator_Cancel,
+        hotKey = RimWorld.KeyBindingDefOf.Designator_Cancel,
         action = delegate
         {
           map.areaManager.NoRoof[cell] = false;
@@ -155,7 +155,7 @@ public class SelectedRoof : ISelectable, IRenameable, ICancelableByDesignator
           {
             map.designationManager.TryRemoveDesignation(cell, DefOf.DesignationDefOf.SmoothRoof);
           },
-          hotKey = KeyBindingDefOf.Designator_Cancel
+          hotKey = RimWorld.KeyBindingDefOf.Designator_Cancel
         };
       }
       else

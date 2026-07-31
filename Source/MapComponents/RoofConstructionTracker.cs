@@ -103,6 +103,13 @@ public class RoofConstructionTracker(Map map) : MapComponent(map)
     {
       if (map.roofGrid != null)
       {
+        // Clear the build/no roof areas first
+        if (map.areaManager != null)
+        {
+            map.areaManager.NoRoof[cell] = false;
+            map.areaManager.BuildRoof[cell] = false;
+        }
+
         map.roofGrid.SetRoof(cell, rec.roofDef);
       }
       

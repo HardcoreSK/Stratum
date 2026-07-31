@@ -74,6 +74,7 @@ public class DeliverRoofIngredients : JobDriver
         EndJobWith(JobCondition.Succeeded);
       }
     };
+    deposit.PlaySoundAtEnd(SoundDefOf.Standard_Drop);
     yield return deposit;
   }
 }

@@ -24,4 +24,9 @@ public class BuildableRoofExtension : DefModExtension
   public bool allowHangingAttachments = true;
   public bool allowRooftopAttachments = true;
   public readonly Dictionary<TerrainDef, ThingDef> terrainToStuff = [];
+
+  public SoundDef? sustainerSound;
+  public SoundDef? finishSound;
+  public EffecterDef? workEffect;
+
 }
