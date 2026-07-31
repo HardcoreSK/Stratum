@@ -46,8 +46,6 @@ public static class PlaySettings_Patch
       StratumLog.Error($"Error in built-in DoMapControls: {ex}");
     }
 
-    RoofBuildings.DoMapControls(row);
-
     bool before = Find.PlaySettings.showRoofOverlay;
 
     if (!SelectedThingUsesFlickKey())
