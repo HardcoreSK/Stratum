@@ -50,25 +50,38 @@ public static class PlaySettings_Patch
 
     bool before = Find.PlaySettings.showRoofOverlay;
 
-    CheckKeyBindingToggle(
-        KeyBindingDefOf.ToggleRoofVisibility,
-        ref Find.PlaySettings.showRoofOverlay);
+    if (!SelectedThingUsesFlickKey())
+    {
+      CheckKeyBindingToggle(
+          KeyBindingDefOf.ToggleRoofVisibility,
+          ref Find.PlaySettings.showRoofOverlay);
+    }
 
     if (Find.CurrentMap != null && before != RoofBuildings.showRoofBuildings)
     {
-        RoofBuildings.DirtyAllRoofBuildingCells(Find.CurrentMap);
+      RoofBuildings.DirtyAllRoofBuildingCells(Find.CurrentMap);
     }
 
   }
 
-private static void CheckKeyBindingToggle(KeyBindingDef keyBinding, ref bool value)
-{
-    if (!keyBinding.KeyDownEvent)
-    return;
-    value = !value;
-    if (value)
-    SoundDefOf.Checkbox_TurnedOn.PlayOneShotOnCamera();
-    else
-    SoundDefOf.Checkbox_TurnedOff.PlayOneShotOnCamera();
-}
+  private static void CheckKeyBindingToggle(KeyBindingDef keyBinding, ref bool value)
+  {
+      if (!keyBinding.KeyDownEvent)
+        return;
+      value = !value;
+      if (value)
+        SoundDefOf.Checkbox_TurnedOn.PlayOneShotOnCamera();
+      else
+        SoundDefOf.Checkbox_TurnedOff.PlayOneShotOnCamera();
+  }
+
+  private static bool SelectedThingUsesFlickKey()
+  {
+      Thing thing = Find.Selector.SingleSelectedThing;
+      if (thing == null)
+          return false;
+
+      return thing.TryGetComp<CompFlickable>() != null;
+  }
+
 }
