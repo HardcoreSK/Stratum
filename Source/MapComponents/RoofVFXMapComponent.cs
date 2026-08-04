@@ -174,7 +174,7 @@ public class RoofVFXMapComponent : MapComponent
   public override void MapComponentTick()
   {
     if (map.skyManager == null) return;
-    float curSkyGlow = Mathf.Max(0.2f,map.skyManager.CurSkyGlow); //HSK - The below comment was for the skylight, but it doesnt stop roofs from being glow in the dark at night. Also we arent regenerating, just updating values of an already passed material. If im wrong, just remove.
+    float curSkyGlow = Mathf.Max(0.3f,map.skyManager.CurSkyGlow); //HSK - The below comment was for the skylight, but it doesnt stop roofs from being glow in the dark at night. Also we arent regenerating, just updating values of an already passed material. If im wrong, just remove.
     RoofAtlasManager.UpdateLighting(curSkyGlow);
 
     // No sky-glow-based mesh dirtying: the lighting overlay bakes nothing time-of-day
