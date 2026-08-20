@@ -12,11 +12,13 @@ public class CustomRoofsRenderer : SectionLayer
 {
   public CustomRoofsRenderer(Section section) : base(section)
   {
-    relevantChangeTypes = (ulong)MapMeshFlagDefOf.Roofs | (ulong)MapMeshFlagDefOf.Buildings | (ulong)MapMeshFlagDefOf.FogOfWar;
+    relevantChangeTypes = (ulong)MapMeshFlagDefOf.Roofs | (ulong)MapMeshFlagDefOf.FogOfWar;
   }
 
-  // Always return true so the mesh regenerates in the background even if the overlay is hidden
   public override bool Visible => true;
+
+  private RoofIntegrityGrid? integrityGrid;
+  private bool integrityGridResolved;
 
   public override void DrawLayer()
   {
@@ -30,11 +32,18 @@ public class CustomRoofsRenderer : SectionLayer
   {
     ClearSubMeshes(MeshParts.All);
 
+    if (Find.PlaySettings == null || !Find.PlaySettings.showRoofOverlay) return;
+
     Map map = base.Map;
     if (map == null || map.roofGrid == null || map.fogGrid == null) return;
 
-    var integrityGrid = map.GetComponent<RoofIntegrityGrid>();
-    if (integrityGrid != null && !integrityGrid.hasScanned && Visible)
+    if (!integrityGridResolved)
+    {
+      integrityGrid = map.GetComponent<RoofIntegrityGrid>();
+      integrityGridResolved = true;
+    }
+
+    if (integrityGrid != null && !integrityGrid.hasScanned)
     {
       integrityGrid.ExecuteScan();
     }
@@ -43,34 +52,38 @@ public class CustomRoofsRenderer : SectionLayer
     cellRect.ClipInsideMap(map);
 
     bool isCutscene = false;
-    CellRect captureBounds;
-    if (GravshipCapturer.IsGravshipRenderInProgress)
+    CellRect captureBounds = GravshipCapturer.GravshipCaptureBounds;
+    if (!GravshipCapturer.IsGravshipRenderInProgress)
     {
-      captureBounds = GravshipCapturer.GravshipCaptureBounds;
-    }
-    else
-    {
-      isCutscene = WorldComponent_GravshipController.CutsceneInProgress && !GravshipCapturer.IsGravshipRenderInProgress && map == Find.CurrentMap;
-      captureBounds = GravshipCapturer.GravshipCaptureBounds;
+      isCutscene = WorldComponent_GravshipController.CutsceneInProgress && map == Find.CurrentMap;
     }
 
-    // Use MapDataOverlay to ensure we draw above the lighting overlay, 
+    // Use MapDataOverlay to ensure we draw above the lighting overlay,
     // but leave MetaOverlays available for ghost placement so we don't z-fight.
     float altitude = AltitudeLayer.MapDataOverlay.AltitudeFor();
 
-    foreach (IntVec3 c in cellRect)
+    var fogGrid = map.fogGrid;
+    var roofGrid = map.roofGrid;
+    var cellIndices = map.cellIndices;
+
+    for (int z = cellRect.minZ; z <= cellRect.maxZ; z++)
     {
-      if (map.fogGrid.IsFogged(c)) continue;
-      if (isCutscene && captureBounds.Contains(c)) continue;
+      int index = cellIndices.CellToIndex(cellRect.minX, z);
+      for (int x = cellRect.minX; x <= cellRect.maxX; x++, index++)
+      {
+        if (fogGrid.IsFogged(index)) continue;
 
-      RoofDef roof = map.roofGrid.RoofAt(c);
-      if (roof == null || !RoofStatCache.IsCustomRoof(roof)) continue;
+        RoofDef roof = roofGrid.RoofAt(index);
+        if (roof == null || !RoofStatCache.IsCustomRoof(roof)) continue;
 
-      // Default options reproduce this renderer's original behaviour: Stratum's own render
-      // queues, MetaOverlay for natural roofs, damage scratches on.
-      RoofCellPainter.PrintRoofCell(this, map, c, roof, integrityGrid, altitude);
+        IntVec3 c = new(x, 0, z);
+        if (isCutscene && captureBounds.Contains(c)) continue;
+
+        // Default options reproduce this renderer's original behaviour: Stratum's own render
+        // queues, MetaOverlay for natural roofs, damage scratches on.
+        RoofCellPainter.PrintRoofCell(this, map, c, roof, integrityGrid, altitude);
+      }
     }
-
 
     FinalizeMesh(MeshParts.All);
   }

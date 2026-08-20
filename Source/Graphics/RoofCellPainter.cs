@@ -111,6 +111,15 @@ public static class RoofCellPainter
       int row = c.z % entry.GridHeight;
       if (row < 0) row += entry.GridHeight;
 
+      // Flattened grid where available -- this resolves once per painted cell, and the tuple-keyed
+      // dictionary is the slower path.
+      var flat = entry.SeamlessFlat;
+      if (flat != null)
+      {
+        int i = row * entry.GridWidth + col;
+        return (uint)i < (uint)flat.Length ? flat[i] : null;
+      }
+
       return entry.SeamlessGrid.TryGetValue((col, row), out var uvs) ? uvs : null;
     }
 
@@ -146,21 +155,21 @@ public static class RoofCellPainter
 
       if (graphicData != null)
       {
-        var entry = RoofAtlasManager.GetEntry(graphicData.texPath);
+        // Resolved once and reused for UVs and materials both; RoofAtlasManager's string-keyed
+        // lookups hash the texture path on every call.
+        var entry = graphicData.AtlasEntry;
         var uvs = ResolveUvs(entry, c);
 
         // A seamless entry with no slot for this cell draws nothing, matching the original.
         if (uvs != null)
         {
-          var (cutout, transparent) = RoofAtlasManager.GetMaterials(graphicData.texPath, roofColor);
-
           if (roof.isNatural && !opts.FlattenNaturalRoofEdges)
           {
             // MetaOverlay is the only shader that honours both the per-vertex alpha ramp and the
             // vertex colours PrintNaturalRoof relies on -- but only at its native queue 4500,
             // where it composites after the scene. Callers that must re-queue it should set
             // FlattenNaturalRoofEdges instead of swapping the shader.
-            PrintNaturalRoof(layer, map, c, RoofAtlasManager.GetMetaOverlay(graphicData.texPath),
+            PrintNaturalRoof(layer, map, c, RoofAtlasManager.GetMetaOverlay(entry),
                              roofColor, altitude, integrityGrid, uvs);
           }
           else if (roof.isNatural)
@@ -168,15 +177,16 @@ public static class RoofCellPainter
             // Flat variant: colour baked into the material, no alpha ramp, so nothing depends on
             // draw order.
             PrintQuad(layer, center, Vector2.one,
-                      AtQueue(RoofAtlasManager.GetMaterials(graphicData.texPath, roofColor).cutout, opts.RenderQueueOverride),
+                      AtQueue(RoofAtlasManager.GetMaterials(entry, roofColor).cutout, opts.RenderQueueOverride),
                       Color.white, 0f, uvs);
           }
           else if (skylight && graphicData.skylightFrameWidth > 0f)
           {
-            PrintFramedSkylight(layer, map, c, roof, graphicData, altitude, stuff, uvs, graphicData.texPath, opts);
+            PrintFramedSkylight(layer, map, c, roof, graphicData, altitude, stuff, uvs, entry, opts);
           }
           else
           {
+            var (cutout, transparent) = RoofAtlasManager.GetMaterials(entry, roofColor);
             Material mat = skylight
               ? AtQueue(transparent, Offset(opts.RenderQueueOverride, 1))
               : AtQueue(cutout, opts.RenderQueueOverride);
@@ -191,7 +201,10 @@ public static class RoofCellPainter
       }
     }
 
-    if (!opts.SuppressDamageScratches && integrityGrid != null && Stratum.Settings.enableRoofDamageScratches)
+    // IsDamaged is a single lookup against the repair set; GetMaxHitPoints below is not (roof grid read,
+    // stuff read, lock, hook dispatch), so undamaged cells -- nearly all of them -- must not reach it.
+    if (!opts.SuppressDamageScratches && integrityGrid != null && Stratum.Settings.enableRoofDamageScratches
+        && integrityGrid.IsDamaged(c))
     {
       short hp = integrityGrid.GetHitPoints(c);
       short maxHp = integrityGrid.GetMaxHitPoints(c);
@@ -205,7 +218,7 @@ public static class RoofCellPainter
   }
 
   public static void PrintFramedSkylight(MapDrawLayer layer, Map map, IntVec3 c, RoofDef roof, RoofGraphicData gd,
-                                         float y, ThingDef? stuff, Vector2[] uv, string texPath,
+                                         float y, ThingDef? stuff, Vector2[] uv, RoofAtlasManager.AtlasEntry entry,
                                          in RoofPaintOptions opts = default)
   {
     float f = gd.skylightFrameWidth;
@@ -217,8 +230,13 @@ public static class RoofCellPainter
     Color glassColor = RoofStatCache.GetGlassTint(roof, map, c);
     glassColor.a = glassAlpha;
 
-    Material frameMat = AtQueue(RoofAtlasManager.GetMaterials(texPath, frameColor).cutout, opts.RenderQueueOverride);
-    Material glassMat = AtQueue(RoofAtlasManager.GetMaterials(texPath, glassColor).transparent, Offset(opts.RenderQueueOverride, 1));
+    Material frameMat = AtQueue(RoofAtlasManager.GetMaterials(entry, frameColor).cutout, opts.RenderQueueOverride);
+    Material glassMat = AtQueue(RoofAtlasManager.GetMaterials(entry, glassColor).transparent, Offset(opts.RenderQueueOverride, 1));
+
+    // Only two materials across the nine slices, so resolve their submeshes once instead of letting
+    // PrintQuad scan the layer's submesh list nine times.
+    LayerSubMesh frameSub = layer.GetSubMesh(frameMat);
+    LayerSubMesh glassSub = layer.GetSubMesh(glassMat);
 
     Vector3 basePos = new(c.x, y, c.z);
 
@@ -227,24 +245,25 @@ public static class RoofCellPainter
 
     Vector2 bl = uv[0], tl = uv[1], tr = uv[2], br = uv[3];
 
+    Vector2 GetUv(float px, float pz)
+    {
+      Vector2 bottom = Vector2.Lerp(bl, br, px);
+      Vector2 top = Vector2.Lerp(tl, tr, px);
+      return Vector2.Lerp(bottom, top, pz);
+    }
+
+    System.Span<Vector2> qUv = stackalloc Vector2[4];
+
     for (int x = 0; x < 3; x++)
     {
       for (int z = 0; z < 3; z++)
       {
         bool isCenter = (x == 1 && z == 1);
-        Material quadMat = isCenter ? glassMat : frameMat;
+        LayerSubMesh quadSub = isCenter ? glassSub : frameSub;
+        if (quadSub == null) continue;
 
         Vector3 qCenter = basePos + new Vector3((p[x] + p[x + 1]) / 2f, 0, (p[z] + p[z + 1]) / 2f);
         Vector2 qSize = new(p[x + 1] - p[x], p[z + 1] - p[z]);
-
-        System.Span<Vector2> qUv = stackalloc Vector2[4];
-
-        Vector2 GetUv(float px, float pz)
-        {
-          Vector2 bottom = Vector2.Lerp(bl, br, px);
-          Vector2 top = Vector2.Lerp(tl, tr, px);
-          return Vector2.Lerp(bottom, top, pz);
-        }
 
         qUv[0] = GetUv(p[x], p[z]);         // BL
         qUv[1] = GetUv(p[x], p[z + 1]);     // TL
@@ -252,51 +271,70 @@ public static class RoofCellPainter
         qUv[3] = GetUv(p[x + 1], p[z]);     // BR
 
         // Vertex color is white because color is baked into the material
-        PrintQuad(layer, qCenter, qSize, quadMat, Color.white, 0f, qUv);
+        PrintQuad(quadSub, qCenter, qSize, Color.white, 0f, qUv);
       }
     }
   }
 
+  // Neighbour slots, in the order they are probed below.
+  private const int NbW = 0, NbE = 1, NbS = 2, NbN = 3, NbSW = 4, NbNW = 5, NbSE = 6, NbNE = 7;
+
   public static void PrintNaturalRoof(MapDrawLayer layer, Map map, IntVec3 c, Material mat, Color roofColor,
                                       float altitude, RoofIntegrityGrid? integrityGrid, Vector2[] uv)
   {
-    bool hasW = HasRoofAt(map, c.x - 1, c.z);
-    bool hasE = HasRoofAt(map, c.x + 1, c.z);
-    bool hasS = HasRoofAt(map, c.x, c.z - 1);
-    bool hasN = HasRoofAt(map, c.x, c.z + 1);
-    bool hasSW = HasRoofAt(map, c.x - 1, c.z - 1);
-    bool hasNW = HasRoofAt(map, c.x - 1, c.z + 1);
-    bool hasSE = HasRoofAt(map, c.x + 1, c.z - 1);
-    bool hasNE = HasRoofAt(map, c.x + 1, c.z + 1);
+    LayerSubMesh subMesh = layer.GetSubMesh(mat);
+    if (subMesh == null) return;
 
-    Color[,] colors = new Color[4, 4];
-    for (int i = 0; i < 4; i++)
+    System.Span<bool> hasRoof = stackalloc bool[8];
+    System.Span<bool> blends = stackalloc bool[8];
+    System.Span<Color> nColor = stackalloc Color[8];
+
+    System.ReadOnlySpan<int> offX = stackalloc int[8] { -1, 1, 0, 0, -1, -1, 1, 1 };
+    System.ReadOnlySpan<int> offZ = stackalloc int[8] { 0, 0, -1, 1, -1, 1, -1, 1 };
+
+    var roofGrid = map.roofGrid;
+    for (int i = 0; i < 8; i++)
     {
-      for (int j = 0; j < 4; j++)
+      IntVec3 cell = new(c.x + offX[i], 0, c.z + offZ[i]);
+      if (!cell.InBounds(map)) continue;
+
+      RoofDef rf = roofGrid.RoofAt(cell);
+      if (rf == null) continue;
+
+      hasRoof[i] = true;
+      if (rf.isNatural && RoofStatCache.IsCustomRoof(rf))
       {
-        colors[i, j] = roofColor;
+        blends[i] = true;
+        nColor[i] = RoofStatCache.GetColor(rf, integrityGrid?.GetStuff(cell));
       }
     }
 
-    colors[0, 1] = GetEdgeColor(map, integrityGrid, roofColor, new IntVec3(c.x - 1, 0, c.z), !hasW);
-    colors[0, 2] = colors[0, 1];
+    // 4x4 vertex colour grid, flattened as [x * 4 + z].
+    System.Span<Color> colors = stackalloc Color[16];
+    for (int i = 0; i < 16; i++) colors[i] = roofColor;
 
-    colors[3, 1] = GetEdgeColor(map, integrityGrid, roofColor, new IntVec3(c.x + 1, 0, c.z), !hasE);
-    colors[3, 2] = colors[3, 1];
+    colors[1] = Blend(roofColor, blends, nColor, NbW, -1, -1, !hasRoof[NbW]);           // [0,1]
+    colors[2] = colors[1];                                                              // [0,2]
 
-    colors[1, 0] = GetEdgeColor(map, integrityGrid, roofColor, new IntVec3(c.x, 0, c.z - 1), !hasS);
-    colors[2, 0] = colors[1, 0];
+    colors[13] = Blend(roofColor, blends, nColor, NbE, -1, -1, !hasRoof[NbE]);          // [3,1]
+    colors[14] = colors[13];                                                            // [3,2]
 
-    colors[1, 3] = GetEdgeColor(map, integrityGrid, roofColor, new IntVec3(c.x, 0, c.z + 1), !hasN);
-    colors[2, 3] = colors[1, 3];
+    colors[4] = Blend(roofColor, blends, nColor, NbS, -1, -1, !hasRoof[NbS]);           // [1,0]
+    colors[8] = colors[4];                                                              // [2,0]
 
-    colors[0, 0] = GetCornerColor(map, integrityGrid, roofColor, new IntVec3(c.x - 1, 0, c.z), new IntVec3(c.x, 0, c.z - 1), new IntVec3(c.x - 1, 0, c.z - 1), !(hasW && hasS && hasSW));
-    colors[0, 3] = GetCornerColor(map, integrityGrid, roofColor, new IntVec3(c.x - 1, 0, c.z), new IntVec3(c.x, 0, c.z + 1), new IntVec3(c.x - 1, 0, c.z + 1), !(hasW && hasN && hasNW));
-    colors[3, 0] = GetCornerColor(map, integrityGrid, roofColor, new IntVec3(c.x + 1, 0, c.z), new IntVec3(c.x, 0, c.z - 1), new IntVec3(c.x + 1, 0, c.z - 1), !(hasE && hasS && hasSE));
-    colors[3, 3] = GetCornerColor(map, integrityGrid, roofColor, new IntVec3(c.x + 1, 0, c.z), new IntVec3(c.x, 0, c.z + 1), new IntVec3(c.x + 1, 0, c.z + 1), !(hasE && hasN && hasNE));
+    colors[7] = Blend(roofColor, blends, nColor, NbN, -1, -1, !hasRoof[NbN]);           // [1,3]
+    colors[11] = colors[7];                                                             // [2,3]
 
-    float f = 0.25f;
-    float[] p = [0f, f, 1f - f, 1f];
+    colors[0] = Blend(roofColor, blends, nColor, NbW, NbS, NbSW,                        // [0,0]
+                      !(hasRoof[NbW] && hasRoof[NbS] && hasRoof[NbSW]));
+    colors[3] = Blend(roofColor, blends, nColor, NbW, NbN, NbNW,                        // [0,3]
+                      !(hasRoof[NbW] && hasRoof[NbN] && hasRoof[NbNW]));
+    colors[12] = Blend(roofColor, blends, nColor, NbE, NbS, NbSE,                       // [3,0]
+                       !(hasRoof[NbE] && hasRoof[NbS] && hasRoof[NbSE]));
+    colors[15] = Blend(roofColor, blends, nColor, NbE, NbN, NbNE,                       // [3,3]
+                       !(hasRoof[NbE] && hasRoof[NbN] && hasRoof[NbNE]));
+
+    System.ReadOnlySpan<float> p = NaturalRamp;
 
     Vector3 basePos = new(c.x, altitude, c.z);
     Vector2 bl = uv[0], tl = uv[1], tr = uv[2], br = uv[3];
@@ -308,6 +346,9 @@ public static class RoofCellPainter
       return Vector2.Lerp(bottom, top, pz);
     }
 
+    System.Span<Vector2> qUv = stackalloc Vector2[4];
+    System.Span<Color> qColors = stackalloc Color[4];
+
     for (int x = 0; x < 3; x++)
     {
       for (int z = 0; z < 3; z++)
@@ -315,79 +356,41 @@ public static class RoofCellPainter
         Vector3 qCenter = basePos + new Vector3((p[x] + p[x + 1]) / 2f, 0, (p[z] + p[z + 1]) / 2f);
         Vector2 qSize = new(p[x + 1] - p[x], p[z + 1] - p[z]);
 
-        Vector2[] qUv = [GetUv(p[x], p[z]), GetUv(p[x], p[z + 1]), GetUv(p[x + 1], p[z + 1]), GetUv(p[x + 1], p[z])];
-        Color[] qColors = [colors[x, z], colors[x, z + 1], colors[x + 1, z + 1], colors[x + 1, z]];
-        PrintQuad(layer, qCenter, qSize, mat, roofColor, 0f, qUv, qColors);
+        qUv[0] = GetUv(p[x], p[z]);
+        qUv[1] = GetUv(p[x], p[z + 1]);
+        qUv[2] = GetUv(p[x + 1], p[z + 1]);
+        qUv[3] = GetUv(p[x + 1], p[z]);
+
+        qColors[0] = colors[x * 4 + z];
+        qColors[1] = colors[x * 4 + z + 1];
+        qColors[2] = colors[(x + 1) * 4 + z + 1];
+        qColors[3] = colors[(x + 1) * 4 + z];
+
+        PrintQuad(subMesh, qCenter, qSize, roofColor, 0f, qUv, qColors);
       }
     }
   }
 
-  private static bool HasRoofAt(Map map, int x, int z)
-  {
-    IntVec3 cell = new(x, 0, z);
-    return cell.InBounds(map) && map.roofGrid.RoofAt(cell) != null;
-  }
+  /// <summary>The 3x3 slice ramp for natural roofs: a quarter-cell blend band on each side.</summary>
+  private static readonly float[] NaturalRamp = [0f, 0.25f, 0.75f, 1f];
 
-  private static Color GetEdgeColor(Map map, RoofIntegrityGrid? integrityGrid, Color selfColor, IntVec3 neighbor, bool fades)
+  /// <summary>
+  /// Averages <paramref name="self"/> with whichever of the given neighbour slots blend, then zeroes
+  /// alpha when the vertex sits on an exposed edge. Slot indices of -1 are skipped, so the same helper
+  /// serves both the one-neighbour edge case and the three-neighbour corner case.
+  /// </summary>
+  private static Color Blend(Color self, System.ReadOnlySpan<bool> blends, System.ReadOnlySpan<Color> nColor,
+                             int s1, int s2, int s3, bool fades)
   {
-    float r = selfColor.r;
-    float g = selfColor.g;
-    float b = selfColor.b;
-    float a = selfColor.a;
+    float r = self.r;
+    float g = self.g;
+    float b = self.b;
+    float a = self.a;
     int count = 1;
 
-    if (neighbor.InBounds(map))
-    {
-      var rf = map.roofGrid.RoofAt(neighbor);
-      if (rf != null && rf.isNatural && RoofStatCache.IsCustomRoof(rf))
-      {
-        var stuff = integrityGrid?.GetStuff(neighbor);
-        Color c = RoofStatCache.GetColor(rf, stuff);
-        r += c.r;
-        g += c.g;
-        b += c.b;
-        a += c.a;
-        count++;
-      }
-    }
-
-    Color avgColor = new(r / count, g / count, b / count, a / count);
-    if (fades)
-    {
-      avgColor.a = 0f;
-    }
-    return avgColor;
-  }
-
-  private static Color GetCornerColor(Map map, RoofIntegrityGrid? integrityGrid, Color selfColor, IntVec3 n1, IntVec3 n2, IntVec3 n3, bool fades)
-  {
-    float r = selfColor.r;
-    float g = selfColor.g;
-    float b = selfColor.b;
-    float a = selfColor.a;
-    int count = 1;
-
-    void AddIfNatural(IntVec3 cell)
-    {
-      if (cell.InBounds(map))
-      {
-        var rf = map.roofGrid.RoofAt(cell);
-        if (rf != null && rf.isNatural && RoofStatCache.IsCustomRoof(rf))
-        {
-          var stuff = integrityGrid?.GetStuff(cell);
-          Color c = RoofStatCache.GetColor(rf, stuff);
-          r += c.r;
-          g += c.g;
-          b += c.b;
-          a += c.a;
-          count++;
-        }
-      }
-    }
-
-    AddIfNatural(n1);
-    AddIfNatural(n2);
-    AddIfNatural(n3);
+    if (s1 >= 0 && blends[s1]) { Color n = nColor[s1]; r += n.r; g += n.g; b += n.b; a += n.a; count++; }
+    if (s2 >= 0 && blends[s2]) { Color n = nColor[s2]; r += n.r; g += n.g; b += n.b; a += n.a; count++; }
+    if (s3 >= 0 && blends[s3]) { Color n = nColor[s3]; r += n.r; g += n.g; b += n.b; a += n.a; count++; }
 
     Color avgColor = new(r / count, g / count, b / count, a / count);
     if (fades)
@@ -398,11 +401,26 @@ public static class RoofCellPainter
   }
 
   /// <summary>Appends a single quad to <paramref name="layer"/>'s submesh for <paramref name="mat"/>.</summary>
+  /// <remarks>
+  /// <see cref="MapDrawLayer.GetSubMesh(Material)"/> is a linear scan over every material the layer has
+  /// ever seen, so callers printing several quads with the same material should resolve the submesh once
+  /// and use the <see cref="LayerSubMesh"/> overload instead.
+  /// </remarks>
   public static void PrintQuad(MapDrawLayer layer, Vector3 center, Vector2 size, Material mat, Color color,
                                float angle = 0f, System.ReadOnlySpan<Vector2> uvArray = default,
-                               Color[]? vertexColors = null)
+                               System.ReadOnlySpan<Color> vertexColors = default)
   {
     LayerSubMesh subMesh = layer.GetSubMesh(mat);
+    if (subMesh == null) return;
+
+    PrintQuad(subMesh, center, size, color, angle, uvArray, vertexColors);
+  }
+
+  /// <summary>Appends a single quad to an already-resolved submesh.</summary>
+  public static void PrintQuad(LayerSubMesh subMesh, Vector3 center, Vector2 size, Color color,
+                               float angle = 0f, System.ReadOnlySpan<Vector2> uvArray = default,
+                               System.ReadOnlySpan<Color> vertexColors = default)
+  {
     if (subMesh == null) return;
 
     int vCount = subMesh.verts.Count;
@@ -426,7 +444,7 @@ public static class RoofCellPainter
     subMesh.verts.Add(v3 + center);
     subMesh.verts.Add(v4 + center);
 
-    if (vertexColors != null && vertexColors.Length >= 4)
+    if (vertexColors.Length >= 4)
     {
       for (int i = 0; i < 4; i++) subMesh.colors.Add(vertexColors[i]);
     }
@@ -478,52 +496,18 @@ public static class RoofCellPainter
       scratchMats = DefaultScratchMats;
     }
 
+    Vector3 center = new(c.x + 0.5f, y, c.z + 0.5f);
+    Color scratchColor = new(1f, 1f, 1f, alpha);
+
     Rand.PushState(c.GetHashCode());
     for (int i = 0; i < scratchesCount; i++)
     {
       Material scratchMat = AtQueue(scratchMats.RandomElement(), Offset(opts.RenderQueueOverride, 2));
-      LayerSubMesh scratchSubMesh = layer.GetSubMesh(scratchMat);
-      if (scratchSubMesh == null) continue;
 
       float rot = Rand.Range(0f, 360f);
       float scale = Rand.Range(0.7f, 0.9f);
 
-      Vector3 center = new(c.x + 0.5f, y, c.z + 0.5f);
-
-      Vector2 size = new(scale, scale);
-      Vector3 v1 = new(-size.x / 2f, 0, -size.y / 2f);
-      Vector3 v2 = new(-size.x / 2f, 0, size.y / 2f);
-      Vector3 v3 = new(size.x / 2f, 0, size.y / 2f);
-      Vector3 v4 = new(size.x / 2f, 0, -size.y / 2f);
-
-      Quaternion rotQ = Quaternion.AngleAxis(rot, Vector3.up);
-      v1 = rotQ * v1 + center;
-      v2 = rotQ * v2 + center;
-      v3 = rotQ * v3 + center;
-      v4 = rotQ * v4 + center;
-
-      int sVCount = scratchSubMesh.verts.Count;
-      scratchSubMesh.verts.Add(v1);
-      scratchSubMesh.verts.Add(v2);
-      scratchSubMesh.verts.Add(v3);
-      scratchSubMesh.verts.Add(v4);
-
-      Color32 scratchColor = new(255, 255, 255, (byte)(alpha * 255));
-      for (int j = 0; j < 4; j++) scratchSubMesh.colors.Add(scratchColor);
-
-      scratchSubMesh.uvs.Add(new(0f, 0f, 0f));
-      scratchSubMesh.uvs.Add(new(0f, 1f, 0f));
-      scratchSubMesh.uvs.Add(new(1f, 1f, 0f));
-      scratchSubMesh.uvs.Add(new(1f, 0f, 0f));
-
-      for (int j = 0; j < 4; j++) scratchSubMesh.normals.Add(Vector3.up);
-
-      scratchSubMesh.tris.Add(sVCount);
-      scratchSubMesh.tris.Add(sVCount + 1);
-      scratchSubMesh.tris.Add(sVCount + 2);
-      scratchSubMesh.tris.Add(sVCount);
-      scratchSubMesh.tris.Add(sVCount + 2);
-      scratchSubMesh.tris.Add(sVCount + 3);
+      PrintQuad(layer, center, new Vector2(scale, scale), scratchMat, scratchColor, rot);
     }
     Rand.PopState();
   }

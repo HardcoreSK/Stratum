@@ -305,6 +305,23 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     return hitPoints[map.cellIndices.CellToIndex(cell)];
   }
 
+  /// <summary>
+  /// Whether this cell's roof is below full hit points.
+  /// </summary>
+  /// <remarks>
+  /// One hash lookup against the repair set, which every hit-point write already keeps in sync. Rendering
+  /// asks this per cell to decide whether damage scratches are needed at all; answering it via
+  /// <see cref="GetMaxHitPoints(IntVec3)"/> instead costs a roof grid read, a stuff read, a lock and a
+  /// hook dispatch for cells that are almost always undamaged.
+  /// </remarks>
+  public bool IsDamaged(IntVec3 cell)
+  {
+    if (!cell.InBounds(map)) return false;
+    return roofsNeedingRepair.Contains(map.cellIndices.CellToIndex(cell));
+  }
+
+  public bool IsDamaged(int index) => roofsNeedingRepair.Contains(index);
+
   public void SetHitPoints(IntVec3 cell, short hp)
   {
     if (!cell.InBounds(map)) return;

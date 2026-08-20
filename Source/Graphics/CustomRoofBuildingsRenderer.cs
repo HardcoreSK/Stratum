@@ -28,6 +28,8 @@ public class CustomRoofBuildingsRenderer : SectionLayer
   {
     ClearSubMeshes(MeshParts.All);
 
+    if (Find.PlaySettings == null || !Find.PlaySettings.showRoofOverlay) return;
+
     Map map = base.Map;
     if (map == null || map.fogGrid == null || map.thingGrid == null) return;
 

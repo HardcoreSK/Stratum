@@ -16,9 +16,23 @@ public static class RoofAtlasManager
     public Texture2D BaseTexture = null!;
     public List<Vector2[]> FlatVariants = [];
     public Dictionary<(int col, int row), Vector2[]>? SeamlessGrid;
+
+    /// <summary>
+    /// <see cref="SeamlessGrid"/> flattened to <c>row * GridWidth + col</c>. Roof painting resolves a
+    /// slot per cell, so the tuple-keyed dictionary probe is worth avoiding; the dictionary stays for
+    /// the callers that enumerate it (debug export, retractable roof console, coating renderer).
+    /// </summary>
+    public Vector2[]?[]? SeamlessFlat;
+
     public int GridWidth;
     public int GridHeight;
     public bool IsSeamless => SeamlessGrid != null;
+
+    /// <summary>
+    /// Memo for <see cref="GetMetaOverlay(string)"/>. The meta overlay has no colour variant, so one
+    /// field replaces a string probe plus a texture probe on every natural roof cell.
+    /// </summary>
+    internal Material? metaOverlay;
   }
 
   public static readonly Dictionary<string, AtlasEntry> uvMap = [];
@@ -124,6 +138,15 @@ public static class RoofAtlasManager
     return GetMaterials(entry.BaseTexture, color);
   }
 
+  /// <summary>
+  /// Overload for callers that already hold the entry, skipping the string-keyed lookup. Per-cell
+  /// painting resolves its entry once and reuses it for UVs and materials both.
+  /// </summary>
+  public static (Material cutout, Material transparent) GetMaterials(AtlasEntry entry, Color color)
+  {
+    return GetMaterials(entry.BaseTexture, color);
+  }
+
   private static (Material cutout, Material transparent) GetMaterials(Texture2D tex, Color color)
   {
     if (tex == null)
@@ -166,8 +189,12 @@ public static class RoofAtlasManager
 
   public static Material GetMetaOverlay(string path)
   {
-    var entry = GetOrCreateEntry(path);
-    return GetMetaOverlay(entry.BaseTexture);
+    return GetMetaOverlay(GetOrCreateEntry(path));
+  }
+
+  public static Material GetMetaOverlay(AtlasEntry entry)
+  {
+    return entry.metaOverlay ??= GetMetaOverlay(entry.BaseTexture);
   }
 
   public static Material GetMetaOverlay(Texture2D tex)
@@ -206,6 +233,7 @@ public static class RoofAtlasManager
       entry.GridWidth = Mathf.RoundToInt((maxX - minX) / firstWidth);
       entry.GridHeight = Mathf.RoundToInt((maxY - minY) / firstHeight);
       entry.SeamlessGrid = [];
+      entry.SeamlessFlat = new Vector2[]?[Mathf.Max(entry.GridWidth * entry.GridHeight, 0)];
 
       foreach (var sprite in spriteList)
       {
@@ -214,7 +242,14 @@ public static class RoofAtlasManager
         int col = Mathf.RoundToInt((sprite.rect.x - minX) / firstWidth);
         int row = Mathf.RoundToInt((sprite.rect.y - minY) / firstHeight);
 
-        entry.SeamlessGrid[(col, row)] = ExtractQuadUvs(sprite);
+        var uvs = ExtractQuadUvs(sprite);
+        entry.SeamlessGrid[(col, row)] = uvs;
+
+        int flatIndex = row * entry.GridWidth + col;
+        if (flatIndex >= 0 && flatIndex < entry.SeamlessFlat.Length)
+        {
+          entry.SeamlessFlat[flatIndex] = uvs;
+        }
       }
 
       StratumLog.Debug($"Seamless '{Path.GetFileNameWithoutExtension(path)}': {spriteList.Count} sprites, grid {entry.GridWidth}x{entry.GridHeight}");
