@@ -1,3 +1,6 @@
+0.12.14:
+Performance: Various tweaks to improve rendering speed.
+
 0.12.13:
 Minor Feature: Added configurable retractable roof opening styles (Iris, Split X, Split Y, Quadrant, Linear Sweep, Console Radial), all normalized to match the baseline Iris duration.
 Minor Feature: Retractable roofs now dynamically scale movement rate and throttle power draw based on available grid surplus and battery energy.
