@@ -1,3 +1,12 @@
+0.12.21:
+Bug Fix: Roof health was rebuilt from the wrong maximum when loading a save, so roofs reinforced by another mod loaded damaged and colonists were sent to repair them.
+Bug Fix: Dubs Skylights frames healed a damaged skylight panel a little more with every reload.
+Bug Fix: Removing a Dubs Skylights frame left the panel above it flagged as damaged at full health, drawing damage and queueing a repair job.
+Bug Fix: Smashing a Dubs Skylights frame destroyed the Stratum roof above it and its neighbours outright.
+Bug Fix: Solar skylights with a Dubs Skylights frame beneath them generated more power than they should.
+Bug Fix: The roof label hid the health readout entirely on roofs reinforced by another mod.
+Bug Fix: Save migrations never ran, because they started before the map finished loading.
+
 0.12.14:
 Performance: Various tweaks to improve rendering speed.
 

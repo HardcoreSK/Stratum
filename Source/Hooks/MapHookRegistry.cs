@@ -215,6 +215,14 @@ public class MapHookRegistry : MapComponent
     return current;
   }
 
+  public static bool HasRoofMaxHitPointsHandlers(Map map)
+  {
+    var globalHandlers = GetGlobalHandlers<RoofMaxHitPointsHandler>(HookId.RoofMaxHitPoints);
+    if (globalHandlers != null && globalHandlers.Count > 0) return true;
+    var handlers = Get(map)?.GetHandlers<RoofMaxHitPointsHandler>(HookId.RoofMaxHitPoints);
+    return handlers != null && handlers.Count > 0;
+  }
+
   public static float GetCellRoofDamageThreshold(Map map, IntVec3 cell, float baseDt)
   {
     float current = baseDt;

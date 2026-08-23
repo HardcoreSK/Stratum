@@ -97,6 +97,14 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     {
       ExecuteScan(force: true);
     }
+
+    // Unconditional, and deliberately not folded into the guard above: RoofVFXMapComponent and
+    // CustomRoofsRenderer also kick off the scan when they find hasScanned false, and map component
+    // FinalizeInit order is not guaranteed. Whichever component wins the race, this is the first
+    // point at which every thing on the map has spawned, so it is the first point at which the
+    // hook-aware maximum is trustworthy. ReconcileRepairSet is idempotent.
+    ReconcileRepairSet();
+
     var registry = MapHookRegistry.Get(map);
     if (registry != null)
     {
@@ -264,11 +272,80 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
       InitializeNaturalRoofsStuff(forceReevaluate: force || !hasScanned);
       hasScanned = true;
       ParallelMapScanner.ExecuteScan(this, force);
+      ReconcileRepairSet();
     }
   }
 
   public override void MapComponentUpdate()
   {
+  }
+
+  /// <summary>
+  /// Assigns full hit points to cells that carry a Stratum roof but have no stored value.
+  /// </summary>
+  /// <remarks>
+  /// Undamaged cells are not persisted; they are reconstructed here on load. The maximum used must
+  /// be the hook-aware one, or a roof whose maximum a compat layer raised (a skylight panel with a
+  /// reinforcing frame under it, say) comes back permanently short of full and is flagged for
+  /// repair forever. <see cref="ParallelMapScanner"/> collects the indices but cannot resolve that
+  /// maximum from a worker thread, so it hands them here.
+  ///
+  /// Writes the array directly rather than going through <see cref="SetHitPoints"/>: that dirties
+  /// the map mesh per cell, and the caller runs during load where the drawer is regenerated
+  /// wholesale afterwards anyway.
+  /// </remarks>
+  internal void InitializeUninitializedCells(List<int> indices)
+  {
+    if (indices == null || indices.Count == 0) return;
+
+    var roofGrid = map.roofGrid;
+    for (int n = 0; n < indices.Count; n++)
+    {
+      int index = indices[n];
+      if (index < 0 || index >= hitPoints.Length) continue;
+
+      var roof = roofGrid.RoofAt(index);
+      if (roof == null || !RoofStatCache.IsCustomRoof(roof)) continue;
+
+      short maxHP = GetMaxHitPoints(map.cellIndices.IndexToCell(index));
+      if (maxHP <= 0) continue;
+
+      hitPoints[index] = maxHP;
+      roofsNeedingRepair.Remove(index);
+    }
+  }
+
+  internal void ReconcileRepairSet()
+  {
+    var roofGrid = map.roofGrid;
+
+    if (!MapHookRegistry.HasRoofMaxHitPointsHandlers(map))
+    {
+      roofsNeedingRepair.RemoveWhere(i =>
+        i < 0 || i >= hitPoints.Length || roofGrid.RoofAt(i) == null || hitPoints[i] <= 0);
+      return;
+    }
+
+    int numCells = map.cellIndices.NumGridCells;
+    for (int i = 0; i < numCells; i++)
+    {
+      var roof = roofGrid.RoofAt(i);
+      if (roof == null || !RoofStatCache.IsCustomRoof(roof))
+      {
+        roofsNeedingRepair.Remove(i);
+        continue;
+      }
+
+      short maxHP = GetMaxHitPoints(map.cellIndices.IndexToCell(i));
+      if (maxHP <= 0) continue;
+
+      if (hitPoints[i] > maxHP) hitPoints[i] = maxHP;
+
+      if (hitPoints[i] > 0 && hitPoints[i] < maxHP)
+        roofsNeedingRepair.Add(i);
+      else
+        roofsNeedingRepair.Remove(i);
+    }
   }
 
   public void InitializeRoof(IntVec3 cell, RoofDef def, ThingDef? stuff = null, UnityEngine.Color? glassTint = null, short? currentHP = null)
@@ -277,7 +354,12 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     int index = map.cellIndices.CellToIndex(cell);
     if (RoofStatCache.IsCustomRoof(def))
     {
-      short maxHP = (short)RoofStatCache.GetMaxHitPoints(def, stuff);
+      // Folded rather than read back through GetMaxHitPoints(cell): the base has to come from the
+      // def and stuff being installed, which stuffDefs does not carry yet, and not every caller has
+      // written the roof grid by the time it gets here. Handlers that need the roof grid simply
+      // decline, which is the pre-hook behaviour rather than a wrong answer.
+      int baseMaxHP = RoofStatCache.GetMaxHitPoints(def, stuff);
+      short maxHP = (short)MapHookRegistry.GetCellRoofMaxHitPoints(map, cell, baseMaxHP);
       hitPoints[index] = currentHP ?? maxHP;
       stuffDefs[index] = stuff;
       glassTints[index] = glassTint;
