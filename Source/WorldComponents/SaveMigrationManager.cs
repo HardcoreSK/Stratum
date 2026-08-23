@@ -8,7 +8,7 @@ namespace SolarWeb.Stratum.WorldComponents;
 
 public class SaveMigrationManager(World world) : WorldComponent(world)
 {
-  private const int CurrentDataVersion = 2;
+  private const int CurrentDataVersion = 3;
   private int lastMigratedDataVersion = 0;
   private string lastPlayedModVersion = "0.0.0";
 
@@ -23,10 +23,8 @@ public class SaveMigrationManager(World world) : WorldComponent(world)
     Scribe_Values.Look(ref lastPlayedModVersion, "lastPlayedModVersion", "0.0.0");
   }
 
-  public override void FinalizeInit(bool fromLoad)
+  public void RunPendingMigrations()
   {
-    base.FinalizeInit(fromLoad);
-    
     string currentModVersion = ModVersion;
     if (lastMigratedDataVersion < CurrentDataVersion)
     {
@@ -38,8 +36,14 @@ public class SaveMigrationManager(World world) : WorldComponent(world)
       }
       StratumLog.Message($"Save migration to Data Version {CurrentDataVersion} complete.");
     }
-    
+
     lastPlayedModVersion = currentModVersion;
+  }
+
+  public void MarkCurrent()
+  {
+    lastMigratedDataVersion = CurrentDataVersion;
+    lastPlayedModVersion = ModVersion;
   }
 
   private void RunMigration(int dataVersion)
@@ -52,6 +56,9 @@ public class SaveMigrationManager(World world) : WorldComponent(world)
         break;
       case 2:
         PerformMigration_v2();
+        break;
+      case 3:
+        PerformMigration_v3();
         break;
     }
   }
@@ -67,6 +74,10 @@ public class SaveMigrationManager(World world) : WorldComponent(world)
   }
 
   private void PerformMigration_v2()
+  {
+  }
+
+  private void PerformMigration_v3()
   {
     foreach (var map in Find.Maps)
     {

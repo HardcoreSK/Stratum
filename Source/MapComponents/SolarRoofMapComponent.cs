@@ -175,6 +175,7 @@ public class SolarRoofMapComponent : MapComponent
 
   private void FloodFill(int startCell, SolarNetwork net, HashSet<int> visited)
   {
+    var integrityGrid = map.GetComponent<RoofIntegrityGrid>();
     Queue<int> queue = new();
     queue.Enqueue(startCell);
     visited.Add(startCell);
@@ -188,14 +189,18 @@ public class SolarRoofMapComponent : MapComponent
       float output = RoofStatCache.GetSolarOutput(roof);
       if (output <= 0f) continue;
 
+      IntVec3 currPos = map.cellIndices.IndexToCell(currIdx);
+
+      int maxHP = integrityGrid?.GetMaxHitPoints(currPos) ?? 0;
+      if (maxHP <= 0) maxHP = RoofStatCache.GetMaxHitPoints(roof);
+
       net.cells.Add(new SolarCellInfo
       {
         cellIdx = currIdx,
         baseOutput = output,
-        maxHP = RoofStatCache.GetMaxHitPoints(roof)
+        maxHP = maxHP
       });
 
-      IntVec3 currPos = map.cellIndices.IndexToCell(currIdx);
       foreach (var dir in GenAdj.CardinalDirections)
       {
         IntVec3 nextPos = currPos + dir;
@@ -291,7 +296,8 @@ public class SolarRoofMapComponent : MapComponent
             {
               IntVec3 pos = map.cellIndices.IndexToCell(cellInfo.cellIdx);
               short hp = integrityGrid.GetHitPoints(pos);
-              curOut *= (float)hp / cellInfo.maxHP;
+              // Clamped because the baked maximum can lag a cell whose maximum was just raised.
+              curOut *= UnityEngine.Mathf.Clamp01((float)hp / cellInfo.maxHP);
             }
 
             if (cellToCoatingMap.TryGetValue(cellInfo.cellIdx, out float lightBlocked))

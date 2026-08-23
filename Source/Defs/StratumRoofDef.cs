@@ -72,7 +72,9 @@ public class StratumRoofDef : RoofDef
         : base.LabelCap;
 
       short hp = integrityGrid.GetHitPoints(cell);
-      short maxHp = (short)RoofStatCache.GetMaxHitPoints(this, stuff);
+      short maxHp = integrityGrid.GetMaxHitPoints(cell);
+      if (maxHp <= 0)
+        maxHp = (short)RoofStatCache.GetMaxHitPoints(this, stuff);
 
       if (hp < maxHp && maxHp > 0)
       {
