@@ -48,6 +48,9 @@
     <PostBuildEvent>xcopy $(MSBuildProjectDirectory)\Mod\ \$(SteamPath) /s /e /h /i /y</PostBuildEvent>
   </PropertyGroup>
 
+  <!-- Set your own RimWorldModsDir in OutputPath.props -->
+  <Import Project="Properties/OutputPath.props" Condition="Exists('Properties/OutputPath.props')" />
+
   <ItemGroup>
     <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.*" />
     <PackageReference Include="Lib.Harmony.Ref" Version="2.4.2" />
