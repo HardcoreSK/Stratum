@@ -106,7 +106,7 @@ public static class BuildableRoofPatch
 
       if (gizmo is Command_Action action
           && action is not Command_BuildCopyRoof
-          && action.hotKey == KeyBindingDefOf.Designator_Deconstruct
+          && action.hotKey == RimWorld.KeyBindingDefOf.Designator_Deconstruct
           && __instance.def?.isThickRoof == true)
       {
         UpdateThickRoofDeconstructCommand(action, __instance);
