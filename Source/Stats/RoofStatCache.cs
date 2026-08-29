@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -35,6 +35,7 @@ public static class RoofStatCache
   public static bool[] isSkylightByIndex = [];
   public static bool[] isCustomRoofByIndex = [];
   public static Color[] glassTintByIndex = [];
+  public static RoofGraphicData?[] graphicDataByIndex = [];
 
   private static readonly object CacheLock = new();
 
@@ -117,27 +118,43 @@ public static class RoofStatCache
         }
       }
     }
-    transparencyByIndex = new float[65536];
-    isSkylightByIndex = new bool[65536];
-    isCustomRoofByIndex = new bool[65536];
-    glassTintByIndex = new Color[65536];
+    // Sized to the highest index actually in use rather than ushort.MaxValue -- these are read once
+    // per painted roof cell, and the old 65536-entry arrays cost ~1MB to hold a few dozen entries.
+    int roofIndexCount = 1;
+    foreach (var def in DefDatabase<RoofDef>.AllDefs)
+    {
+      if (def.index >= roofIndexCount) roofIndexCount = def.index + 1;
+    }
+
+    transparencyByIndex = new float[roofIndexCount];
+    isSkylightByIndex = new bool[roofIndexCount];
+    isCustomRoofByIndex = new bool[roofIndexCount];
+    glassTintByIndex = new Color[roofIndexCount];
+    graphicDataByIndex = new RoofGraphicData?[roofIndexCount];
     foreach (var def in DefDatabase<RoofDef>.AllDefs)
     {
       int idx = def.index;
       isCustomRoofByIndex[idx] = buildableCache.Contains(def.defNameHash);
-      
+
       transparencyByIndex[idx] = GetTransparency(def);
-      
+
       isSkylightByIndex[idx] = skylightCache.Contains(def.defNameHash);
       glassTintByIndex[idx] = glassTintCache.TryGetValue(def.defNameHash, out var val) ? val : Color.white;
+      graphicDataByIndex[idx] = graphicDataCache.TryGetValue(def.defNameHash, out var gd) ? gd : null;
     }
 
     MapComponents.RoofIntegrityGrid.ClearCaches();
     RoofAtlasManager.Initialize();
   }
 
-  public static bool IsCustomRoof(RoofDef def) => def != null && isCustomRoofByIndex[def.index];
-  public static bool IsSkylight(RoofDef def) => def != null && isSkylightByIndex[def.index];
+  // Def.index defaults to ushort.MaxValue and is only assigned by DefDatabase registration, so a def
+  // that never made it into the database indexes past these arrays. Guarded rather than sized to
+  // ushort.MaxValue, which cost ~1MB to hold a few dozen entries.
+  public static bool IsCustomRoof(RoofDef def) =>
+    def != null && (uint)def.index < (uint)isCustomRoofByIndex.Length && isCustomRoofByIndex[def.index];
+
+  public static bool IsSkylight(RoofDef def) =>
+    def != null && (uint)def.index < (uint)isSkylightByIndex.Length && isSkylightByIndex[def.index];
   public static bool IsVisibleRoof(RoofDef def) => def != null && !def.isNatural;
 
   private static readonly Dictionary<int, float> roofStuffBeautyCache = [];
@@ -309,7 +326,7 @@ public static class RoofStatCache
   public static float GetTransparency(RoofDef def)
   {
     if (def == null) return 0f;
-    
+
     ushort hash = def.shortHash;
     float? cached = transparencyHashCache[hash];
     if (cached.HasValue) return cached.Value;
@@ -331,9 +348,21 @@ public static class RoofStatCache
         }
       }
     }
+    max = Mathf.Clamp01(max * Stratum.Settings.skylightTransmissionMultiplier);
     transparencyHashCache[hash] = max;
-    transparencyByIndex[def.index] = max;
+    if ((uint)def.index < (uint)transparencyByIndex.Length) transparencyByIndex[def.index] = max;
     return max;
+  }
+
+  // The multiplier above is a mod setting, so both memos have to be dropped when it moves.
+  public static void InvalidateTransparencyCache()
+  {
+    System.Array.Clear(transparencyHashCache, 0, transparencyHashCache.Length);
+    if (transparencyByIndex == null) return;
+    foreach (var def in DefDatabase<RoofDef>.AllDefs)
+    {
+      GetTransparency(def);
+    }
   }
 
   public static float GetEffectiveTransparency(RoofDef def, Map? map, IntVec3 cell)
@@ -350,7 +379,7 @@ public static class RoofStatCache
     if (baseTrans <= 0f) return 0f;
     if (coating != null && cell.IsValid)
     {
-      baseTrans *= Mathf.Clamp01(1f - coating.GetCoatingOpacity(cell));
+      baseTrans *= Mathf.Clamp01(1f - coating.GetLightBlockedFraction(cell));
     }
     return baseTrans;
   }
@@ -483,22 +512,29 @@ public static class RoofStatCache
   public static RoofGraphicData? GetGraphicData(RoofDef def)
   {
     if (def == null) return null;
+    int idx = def.index;
+    if (idx < graphicDataByIndex.Length) return graphicDataByIndex[idx];
     return graphicDataCache.TryGetValue(def.defNameHash, out var val) ? val : null;
   }
+
+  private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Color> stuffColorCache = new();
 
   public static Color GetColor(RoofDef def, ThingDef? stuff = null)
   {
     if (stuff != null && stuff.stuffProps != null)
     {
+      if (def == null) return stuff.stuffProps.color;
+
+      int key = (def.index << 16) | stuff.index;
+      if (stuffColorCache.TryGetValue(key, out var cached)) return cached;
+
       Color baseColor = stuff.stuffProps.color;
-      if (def != null)
+      var ext = def.GetModExtension<BuildableRoofExtension>();
+      if (ext?.graphicData != null)
       {
-        var ext = def.GetModExtension<BuildableRoofExtension>();
-        if (ext?.graphicData != null)
-        {
-          baseColor *= ext.graphicData.color;
-        }
+        baseColor *= ext.graphicData.color;
       }
+      stuffColorCache[key] = baseColor;
       return baseColor;
     }
     if (def == null) return Color.white;
@@ -518,7 +554,7 @@ public static class RoofStatCache
       if (tint.HasValue) return tint.Value;
     }
     if (def == null) return Color.white;
-    return glassTintByIndex[def.index];
+    return (uint)def.index < (uint)glassTintByIndex.Length ? glassTintByIndex[def.index] : Color.white;
   }
 
   public static Color GetGlassTint(RoofDef def, MapComponents.RoofIntegrityGrid? integrity, IntVec3 cell)
@@ -529,7 +565,7 @@ public static class RoofStatCache
       if (tint.HasValue) return tint.Value;
     }
     if (def == null) return Color.white;
-    return glassTintByIndex[def.index];
+    return (uint)def.index < (uint)glassTintByIndex.Length ? glassTintByIndex[def.index] : Color.white;
   }
 
   public static Color GetGlassTint(RoofDef def, MapComponents.RoofIntegrityGrid? integrity, int index)
@@ -540,7 +576,7 @@ public static class RoofStatCache
       if (tint.HasValue) return tint.Value;
     }
     if (def == null) return Color.white;
-    return glassTintByIndex[def.index];
+    return (uint)def.index < (uint)glassTintByIndex.Length ? glassTintByIndex[def.index] : Color.white;
   }
 
   public static RoofEdgeGraphicData? GetEdgeGraphicData(RoofDef def)

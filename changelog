@@ -1,3 +1,59 @@
+0.12.21:
+Bug Fix: Roof health was rebuilt from the wrong maximum when loading a save, so roofs reinforced by another mod loaded damaged and colonists were sent to repair them.
+Bug Fix: Dubs Skylights frames healed a damaged skylight panel a little more with every reload.
+Bug Fix: Removing a Dubs Skylights frame left the panel above it flagged as damaged at full health, drawing damage and queueing a repair job.
+Bug Fix: Smashing a Dubs Skylights frame destroyed the Stratum roof above it and its neighbours outright.
+Bug Fix: Solar skylights with a Dubs Skylights frame beneath them generated more power than they should.
+Bug Fix: The roof label hid the health readout entirely on roofs reinforced by another mod.
+Bug Fix: Save migrations never ran, because they started before the map finished loading.
+
+0.12.14:
+Performance: Various tweaks to improve rendering speed.
+
+0.12.13:
+Minor Feature: Added configurable retractable roof opening styles (Iris, Split X, Split Y, Quadrant, Linear Sweep, Console Radial), all normalized to match the baseline Iris duration.
+Minor Feature: Retractable roofs now dynamically scale movement rate and throttle power draw based on available grid surplus and battery energy.
+Bug Fix: Retractable roof transitions now pause when power is lost rather than continuing without power.
+Bug Fix: Intercepted drop pods and skyfallers now safely deflect to open ground without deleting contained pawns and cargo.
+Bug Fix: Prevented retractable roof cells from becoming orphaned and unclosable during interrupted closes or reload.
+
+0.12.8:
+Balance: Skylights now let through noticeably more light, and the glass tiers are spread further apart. Reinforced glass panels are now the clearest roof to grow crops under, ahead of standard skylights, solar skylights, and luxury glass.
+Balance: Dirt, pollen, and snow on skylights now block half as much light as before, so a greenhouse degrades gradually instead of falling off a cliff once it gets slightly dusty.
+Balance: Colonists now clean skylights once they are half as dirty as before, and wiping down a lightly dusted panel is much quicker than scrubbing a filthy one. A colonist's cleaning speed now matters.
+Minor Feature: Added a setting controlling how much dirt, pollen, and snow on a skylight blocks light. Set it to 0% to make coatings purely cosmetic.
+Minor Feature: Added a setting scaling how much light every skylight transmits, up to fully transparent.
+Bug Fix: Skylight dirt, pollen, and snow had no effect on light at all for players using Tilt the Planet.
+Bug Fix: Interrupting a colonist part-way through cleaning a skylight still left the panel completely clean.
+Bug Fix: Changing skylight settings did not refresh lighting until something else forced the map to redraw.
+
+0.12.0:
+Compatibility: Added native compatibility for Telardo's MultiFloors.
+Compatibility: Light through stacked MultiFloors skylights now compounds, growing dimmer and taking on the colour of each pane it passes through.
+Bug Fix: Skylight light pools used the roof's texture colour rather than the skylight's glass tint, so tinted skylights cast uncoloured light.
+Minor Feature: Added a setting controlling whether unroofed cells lose sunlight when an upper level covers them.
+API: Added a per-cell skylight tint hook, allowing other mods to adjust the colour of light passing through a skylight.
+API: Expanded MapHookRegistry with global hook handlers and centralized hook invocation dispatchers.
+Graphics: Restricted roof and rooftop building rendering to the active map.
+Refactor: Extracted roof cell painting logic into RoofCellPainter.
+
+0.11.37:
+Bug Fix: Some roofs that should have been unbuildable could be built via "Build Copy".
+
+0.11.36:
+Bug Fix: Snow was not rendering on skylights built over walls.
+Performance: Reduced the cost of skylight lighting and tint rendering, particularly on maps with many skylights.
+Performance: Reduced unnecessary map mesh rebuilds as snow, dirt, and pollen accumulate on roofs.
+API: Added a per-cell skylight transmission hook, allowing other mods to adjust how much light an individual skylight tile lets through.
+Bug Fix: Solar Skylight power generation wasn't affected by snow accumulation.
+
+0.11.31:
+Balance: Adjusted the rate dirt and pollen accumulate on skylights.
+
+0.11.30:
+Bug Fix: Added Comp_Flickable to various powered roof attachments.
+Balance: Adjusted roof stats to better reflect specialties and tech advancement.
+
 0.11.28:
 Performance: Improved roof generation time for pocket maps.
 

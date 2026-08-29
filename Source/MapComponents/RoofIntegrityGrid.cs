@@ -97,6 +97,14 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     {
       ExecuteScan(force: true);
     }
+
+    // Unconditional, and deliberately not folded into the guard above: RoofVFXMapComponent and
+    // CustomRoofsRenderer also kick off the scan when they find hasScanned false, and map component
+    // FinalizeInit order is not guaranteed. Whichever component wins the race, this is the first
+    // point at which every thing on the map has spawned, so it is the first point at which the
+    // hook-aware maximum is trustworthy. ReconcileRepairSet is idempotent.
+    ReconcileRepairSet();
+
     var registry = MapHookRegistry.Get(map);
     if (registry != null)
     {
@@ -264,11 +272,80 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
       InitializeNaturalRoofsStuff(forceReevaluate: force || !hasScanned);
       hasScanned = true;
       ParallelMapScanner.ExecuteScan(this, force);
+      ReconcileRepairSet();
     }
   }
 
   public override void MapComponentUpdate()
   {
+  }
+
+  /// <summary>
+  /// Assigns full hit points to cells that carry a Stratum roof but have no stored value.
+  /// </summary>
+  /// <remarks>
+  /// Undamaged cells are not persisted; they are reconstructed here on load. The maximum used must
+  /// be the hook-aware one, or a roof whose maximum a compat layer raised (a skylight panel with a
+  /// reinforcing frame under it, say) comes back permanently short of full and is flagged for
+  /// repair forever. <see cref="ParallelMapScanner"/> collects the indices but cannot resolve that
+  /// maximum from a worker thread, so it hands them here.
+  ///
+  /// Writes the array directly rather than going through <see cref="SetHitPoints"/>: that dirties
+  /// the map mesh per cell, and the caller runs during load where the drawer is regenerated
+  /// wholesale afterwards anyway.
+  /// </remarks>
+  internal void InitializeUninitializedCells(List<int> indices)
+  {
+    if (indices == null || indices.Count == 0) return;
+
+    var roofGrid = map.roofGrid;
+    for (int n = 0; n < indices.Count; n++)
+    {
+      int index = indices[n];
+      if (index < 0 || index >= hitPoints.Length) continue;
+
+      var roof = roofGrid.RoofAt(index);
+      if (roof == null || !RoofStatCache.IsCustomRoof(roof)) continue;
+
+      short maxHP = GetMaxHitPoints(map.cellIndices.IndexToCell(index));
+      if (maxHP <= 0) continue;
+
+      hitPoints[index] = maxHP;
+      roofsNeedingRepair.Remove(index);
+    }
+  }
+
+  internal void ReconcileRepairSet()
+  {
+    var roofGrid = map.roofGrid;
+
+    if (!MapHookRegistry.HasRoofMaxHitPointsHandlers(map))
+    {
+      roofsNeedingRepair.RemoveWhere(i =>
+        i < 0 || i >= hitPoints.Length || roofGrid.RoofAt(i) == null || hitPoints[i] <= 0);
+      return;
+    }
+
+    int numCells = map.cellIndices.NumGridCells;
+    for (int i = 0; i < numCells; i++)
+    {
+      var roof = roofGrid.RoofAt(i);
+      if (roof == null || !RoofStatCache.IsCustomRoof(roof))
+      {
+        roofsNeedingRepair.Remove(i);
+        continue;
+      }
+
+      short maxHP = GetMaxHitPoints(map.cellIndices.IndexToCell(i));
+      if (maxHP <= 0) continue;
+
+      if (hitPoints[i] > maxHP) hitPoints[i] = maxHP;
+
+      if (hitPoints[i] > 0 && hitPoints[i] < maxHP)
+        roofsNeedingRepair.Add(i);
+      else
+        roofsNeedingRepair.Remove(i);
+    }
   }
 
   public void InitializeRoof(IntVec3 cell, RoofDef def, ThingDef? stuff = null, UnityEngine.Color? glassTint = null, short? currentHP = null)
@@ -277,7 +354,12 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     int index = map.cellIndices.CellToIndex(cell);
     if (RoofStatCache.IsCustomRoof(def))
     {
-      short maxHP = (short)RoofStatCache.GetMaxHitPoints(def, stuff);
+      // Folded rather than read back through GetMaxHitPoints(cell): the base has to come from the
+      // def and stuff being installed, which stuffDefs does not carry yet, and not every caller has
+      // written the roof grid by the time it gets here. Handlers that need the roof grid simply
+      // decline, which is the pre-hook behaviour rather than a wrong answer.
+      int baseMaxHP = RoofStatCache.GetMaxHitPoints(def, stuff);
+      short maxHP = (short)MapHookRegistry.GetCellRoofMaxHitPoints(map, cell, baseMaxHP);
       hitPoints[index] = currentHP ?? maxHP;
       stuffDefs[index] = stuff;
       glassTints[index] = glassTint;
@@ -304,6 +386,23 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     if (!cell.InBounds(map)) return 0;
     return hitPoints[map.cellIndices.CellToIndex(cell)];
   }
+
+  /// <summary>
+  /// Whether this cell's roof is below full hit points.
+  /// </summary>
+  /// <remarks>
+  /// One hash lookup against the repair set, which every hit-point write already keeps in sync. Rendering
+  /// asks this per cell to decide whether damage scratches are needed at all; answering it via
+  /// <see cref="GetMaxHitPoints(IntVec3)"/> instead costs a roof grid read, a stuff read, a lock and a
+  /// hook dispatch for cells that are almost always undamaged.
+  /// </remarks>
+  public bool IsDamaged(IntVec3 cell)
+  {
+    if (!cell.InBounds(map)) return false;
+    return roofsNeedingRepair.Contains(map.cellIndices.CellToIndex(cell));
+  }
+
+  public bool IsDamaged(int index) => roofsNeedingRepair.Contains(index);
 
   public void SetHitPoints(IntVec3 cell, short hp)
   {
@@ -359,6 +458,60 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     return glassTints[index];
   }
 
+  /// <summary>
+  /// Mitigates <paramref name="amount"/> through the roof's damage threshold and armour, honouring
+  /// any compat hook that wants to own the calculation outright.
+  /// </summary>
+  /// <remarks>
+  /// Shared by <see cref="TakeDamage"/> and <see cref="WouldSurviveDamage"/> so the question
+  /// "will this roof stop the skyfaller?" and the answer applied on impact cannot drift apart.
+  /// They used to be computed separately, which let a roof pass the pre-impact check and then
+  /// survive the impact anyway -- destroying the pod and everything inside it.
+  /// </remarks>
+  private float ComputeEffectiveDamage(IntVec3 cell, RoofDef roof, ThingDef? stuff, float amount, float penetration, DamageInfo? dinfo)
+  {
+    float effectiveDamage = amount;
+
+    if (MapHookRegistry.TryCalculateRoofDamage(map, roof, stuff, amount, penetration, dinfo, ref effectiveDamage))
+      return effectiveDamage;
+
+    float dt = RoofStatCache.GetDamageThreshold(roof, stuff);
+    dt = MapHookRegistry.GetCellRoofDamageThreshold(map, cell, dt);
+
+    effectiveDamage -= dt;
+    if (effectiveDamage <= 0) return 0f;
+
+    float ar = RoofStatCache.GetArmorRating(roof, stuff);
+    ar = MapHookRegistry.GetCellRoofArmorRating(map, cell, ar);
+
+    float effectiveArmor = System.Math.Max(0f, ar - penetration);
+    return effectiveDamage * (1f - effectiveArmor);
+  }
+
+  /// <summary>
+  /// Would the roof over <paramref name="cell"/> still be standing after taking
+  /// <paramref name="amount"/> damage? Returns false when there is no roof to begin with.
+  /// </summary>
+  /// <remarks>
+  /// Deliberately deterministic where <see cref="TakeDamage"/> uses <c>GenMath.RoundRandom</c>:
+  /// rounding the damage down means a borderline roof reports as surviving, which routes the
+  /// skyfaller elsewhere. Erring toward relocation is always the safe direction.
+  /// </remarks>
+  public bool WouldSurviveDamage(IntVec3 cell, float amount, float penetration = 0f)
+  {
+    if (!cell.InBounds(map)) return false;
+    int index = map.cellIndices.CellToIndex(cell);
+    if (hitPoints[index] <= 0) return false;
+
+    var roof = map.roofGrid.RoofAt(cell);
+    if (roof == null) return false;
+
+    float effectiveDamage = ComputeEffectiveDamage(cell, roof, stuffDefs[index], amount, penetration, null);
+    if (effectiveDamage <= 0) return true;
+
+    return hitPoints[index] > UnityEngine.Mathf.FloorToInt(effectiveDamage);
+  }
+
   public void TakeDamage(IntVec3 cell, float amount, float penetration = 0f, DamageInfo? dinfo = null)
   {
     if (dinfo != null && !dinfo.Value.Def.harmsHealth) return;
@@ -371,32 +524,8 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     if (roof == null) return;
 
     var stuff = stuffDefs[index];
-    float dt = RoofStatCache.GetDamageThreshold(roof, stuff);
-    dt = MapHookRegistry.GetCellRoofDamageThreshold(map, cell, dt);
 
-    float ar = RoofStatCache.GetArmorRating(roof, stuff);
-    ar = MapHookRegistry.GetCellRoofArmorRating(map, cell, ar);
-
-    float effectiveDamage = amount;
-
-    bool handled = MapHookRegistry.TryCalculateRoofDamage(
-      map,
-      roof,
-      stuff,
-      amount,
-      penetration,
-      dinfo,
-      ref effectiveDamage);
-
-    if (!handled)
-    {
-      effectiveDamage -= dt;
-      if (effectiveDamage <= 0) return;
-
-      float effectiveArmor = System.Math.Max(0f, ar - penetration);
-      effectiveDamage *= (1f - effectiveArmor);
-    }
-
+    float effectiveDamage = ComputeEffectiveDamage(cell, roof, stuff, amount, penetration, dinfo);
     if (effectiveDamage <= 0) return;
 
     int finalDamage = GenMath.RoundRandom(effectiveDamage);

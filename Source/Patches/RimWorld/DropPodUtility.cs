@@ -1,14 +1,24 @@
 using HarmonyLib;
 using RimWorld;
-using SolarWeb.Stratum.DefModExtensions;
-using SolarWeb.Stratum.MapComponents;
 using Verse;
+
+using SolarWeb.Stratum.MapComponents;
+using SolarWeb.Stratum.Utilities;
 
 namespace SolarWeb.Stratum.Patches;
 
 [HarmonyPatch]
 public static class DropPodUtility_Patch
 {
+  /// <summary>
+  /// Steers a pod away from any roof that would stop it, before the skyfaller is ever created.
+  /// An empty decoy is dropped on the original cell so the player still sees -- and hears -- the
+  /// pod slam into their hull.
+  /// </summary>
+  /// <remarks>
+  /// When nothing landable exists anywhere on the map the pod is left where it was aimed;
+  /// Skyfaller_Patch then lets it punch through the roof rather than destroying its contents.
+  /// </remarks>
   [HarmonyPatch(typeof(DropPodUtility), nameof(DropPodUtility.MakeDropPodAt))]
   [HarmonyPrefix]
   public static void MakeDropPodAt_Prefix(ref IntVec3 c, Map map, ActiveTransporterInfo info, Faction faction)
@@ -16,56 +26,23 @@ public static class DropPodUtility_Patch
     if (!Stratum.Settings.enableDropPodInterception) return;
     if (map == null || !c.IsValid || !c.InBounds(map)) return;
 
-    var roof = map.roofGrid.RoofAt(c);
-    if (roof != null && roof.HasModExtension<BuildableRoofExtension>())
-    {
-      var integrityGrid = map.GetComponent<RoofIntegrityGrid>();
-      if (integrityGrid != null)
-      {
-        var fallerDef = info?.sentTransporterDef?.dropPodFaller ?? faction?.def.dropPodIncoming ?? ThingDefOf.DropPodIncoming;
-        var podDamage = (fallerDef.BaseMaxHitPoints < 300) ? 300 : fallerDef.BaseMaxHitPoints;
+    var fallerDef = info?.sentTransporterDef?.dropPodFaller ?? faction?.def.dropPodIncoming ?? ThingDefOf.DropPodIncoming;
 
-        if (integrityGrid.GetHitPoints(c) > podDamage)
-        {
-          IntVec3 originalCell = c;
-          IntVec3 newCell = IntVec3.Invalid;
+    // Read the same hit points the impact path reads. A local floor here would silently disagree
+    // with Skyfallers_MaxHitPoints.xml the moment either number moved.
+    int podHitPoints = fallerDef.BaseMaxHitPoints;
 
-          int searchRadius = 15;
-          int maxCells = GenRadial.NumCellsInRadius(searchRadius);
-          for (int i = 0; i < maxCells; i++)
-          {
-            IntVec3 searchCell = originalCell + GenRadial.RadialPattern[i];
-            if (searchCell.InBounds(map) && searchCell.Walkable(map))
-            {
-              var searchRoof = map.roofGrid.RoofAt(searchCell);
-              bool isBlocked = false;
-              if (searchRoof != null && searchRoof.HasModExtension<BuildableRoofExtension>())
-              {
-                if (integrityGrid.GetHitPoints(searchCell) > podDamage)
-                {
-                  isBlocked = true;
-                }
-              }
+    RoofIntegrityGrid? grid = null;
+    if (!RoofInterceptionUtility.WouldRoofStopSkyfaller(map, c, podHitPoints, ref grid)) return;
 
-              if (!isBlocked)
-              {
-                newCell = searchCell;
-                break;
-              }
-            }
-          }
+    if (!RoofInterceptionUtility.TryFindSafeCell(map, c, podHitPoints, out IntVec3 newCell)) return;
 
-          if (newCell.IsValid)
-          {
-            c = newCell;
+    IntVec3 originalCell = c;
+    c = newCell;
 
-            var podDef = info?.sentTransporterDef?.dropPodActive ?? faction?.def.dropPodActive ?? ThingDefOf.ActiveDropPod;
-            ActiveTransporter dummyTransporter = (ActiveTransporter)ThingMaker.MakeThing(podDef);
-            dummyTransporter.Contents = new ActiveTransporterInfo();
-            SkyfallerMaker.SpawnSkyfaller(fallerDef, dummyTransporter, originalCell, map);
-          }
-        }
-      }
-    }
+    var podDef = info?.sentTransporterDef?.dropPodActive ?? faction?.def.dropPodActive ?? ThingDefOf.ActiveDropPod;
+    ActiveTransporter dummyTransporter = (ActiveTransporter)ThingMaker.MakeThing(podDef);
+    dummyTransporter.Contents = new ActiveTransporterInfo();
+    SkyfallerMaker.SpawnSkyfaller(fallerDef, dummyTransporter, originalCell, map);
   }
 }
