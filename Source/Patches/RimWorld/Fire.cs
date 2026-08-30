@@ -27,6 +27,16 @@ public static class Fire_Patch
   }
 
   [HarmonyPatch("TrySpread")]
+  [HarmonyPrefix]
+  public static bool TrySpread_Prefix(Fire __instance)
+  {
+    // RoofFire uses this patched method only as a trigger for the Stratum postfix below. Running
+    // vanilla TrySpread also enters CE's wind calculation, which assumes an ordinary ground fire
+    // and can throw before a roof spread attempt completes.
+    return __instance is not RoofFire;
+  }
+
+  [HarmonyPatch("TrySpread")]
   [HarmonyPostfix]
   public static void TrySpread_Postfix(Fire __instance)
   {

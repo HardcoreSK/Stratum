@@ -468,12 +468,17 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
   /// They used to be computed separately, which let a roof pass the pre-impact check and then
   /// survive the impact anyway -- destroying the pod and everything inside it.
   /// </remarks>
-  private float ComputeEffectiveDamage(IntVec3 cell, RoofDef roof, ThingDef? stuff, float amount, float penetration, DamageInfo? dinfo)
+  private float ComputeEffectiveDamage(IntVec3 cell, RoofDef roof, ThingDef? stuff, float amount, float penetration, DamageInfo? dinfo, bool bypassProtection = false)
   {
     float effectiveDamage = amount;
 
     if (MapHookRegistry.TryCalculateRoofDamage(map, roof, stuff, amount, penetration, dinfo, ref effectiveDamage))
       return effectiveDamage;
+
+    // A roof that is already burning takes thermal damage rather than another impact. Applying
+    // the ballistic threshold here makes any roof with DT 3 or higher immune to RoofFire, whose
+    // maximum damage roll is only 3, leaving an otherwise valid fire burning forever.
+    if (bypassProtection) return effectiveDamage;
 
     float dt = RoofStatCache.GetDamageThreshold(roof, stuff);
     dt = MapHookRegistry.GetCellRoofDamageThreshold(map, cell, dt);
@@ -514,6 +519,16 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
 
   public void TakeDamage(IntVec3 cell, float amount, float penetration = 0f, DamageInfo? dinfo = null)
   {
+    TakeDamageInternal(cell, amount, penetration, dinfo, bypassProtection: false);
+  }
+
+  internal void TakeFireDamage(IntVec3 cell, float amount)
+  {
+    TakeDamageInternal(cell, amount, 0f, new DamageInfo(DamageDefOf.Flame, amount), bypassProtection: true);
+  }
+
+  private void TakeDamageInternal(IntVec3 cell, float amount, float penetration, DamageInfo? dinfo, bool bypassProtection)
+  {
     if (dinfo != null && !dinfo.Value.Def.harmsHealth) return;
 
     if (!cell.InBounds(map)) return;
@@ -525,7 +540,7 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
 
     var stuff = stuffDefs[index];
 
-    float effectiveDamage = ComputeEffectiveDamage(cell, roof, stuff, amount, penetration, dinfo);
+    float effectiveDamage = ComputeEffectiveDamage(cell, roof, stuff, amount, penetration, dinfo, bypassProtection);
     if (effectiveDamage <= 0) return;
 
     int finalDamage = GenMath.RoundRandom(effectiveDamage);

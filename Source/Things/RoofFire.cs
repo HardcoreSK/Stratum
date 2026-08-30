@@ -110,7 +110,7 @@ public class RoofFire : Fire
     int damage = GenMath.RoundRandom(Mathf.Clamp(0.0125f + 0.0036f * fireSize, 0.0125f, 0.05f) * 150f);
     if (damage < 1) damage = 1;
 
-    integrityGrid?.TakeDamage(pos, damage);
+    integrityGrid?.TakeFireDamage(pos, damage);
 
     if (!Spawned) return;
 
