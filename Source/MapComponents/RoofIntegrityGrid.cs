@@ -240,7 +240,11 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
         {
           var stuff = GetStuff(c);
           var ext = oldRoof.GetModExtension<BuildableRoofExtension>();
-          if (ext != null && ext.buildableDef != null)
+          // Roofs placed by another mod can have no Stratum material data. In
+          // particular, SOS2 creates RoofShip directly instead of going through
+          // a Stratum construction frame. Do not invent a default material (and
+          // a refund for resources that may never have been paid) for those roofs.
+          if (stuff != null && ext != null && ext.buildableDef != null)
           {
             var costList = ext.buildableDef.CostListAdjusted(stuff);
             if (costList != null)

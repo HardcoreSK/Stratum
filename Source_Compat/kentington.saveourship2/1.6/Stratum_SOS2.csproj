@@ -17,6 +17,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>embedded</DebugType>
     <WarningLevel>4</WarningLevel>
+    <BuildProjectReferences>False</BuildProjectReferences>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -41,7 +42,9 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
-
+  
+  <!-- Set your own RimWorldModsDir in OutputPath.props-->
+  <Import Project="Properties/OutputPath.props" Condition="Exists('Properties/OutputPath.props')" />
   <ItemGroup>
     <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4633" />
     <PackageReference Include="Lib.Harmony.Ref" Version="2.4.2" />
