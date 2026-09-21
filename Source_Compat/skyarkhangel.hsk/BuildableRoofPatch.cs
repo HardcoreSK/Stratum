@@ -14,8 +14,7 @@ namespace SolarWeb.Stratum.HSK;
 public static class BuildableRoofPatch
 {
   private const string ThickRoofRemovalResearchDefName = "ThickStoneRoofRemoval";
-  private const string ThickRoofRemovalResearchRequiredKey =
-    "SolarWeb_Stratum_ThickRoofRemovalResearchRequired";
+  private const string ThickRoofRemovalResearchRequiredKey = "SolarWeb_Stratum_ThickRoofRemovalResearchRequired";
 
   static BuildableRoofPatch()
   {

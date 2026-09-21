@@ -37,20 +37,21 @@ public class BuildCustomRoof : JobDriver
 
     #region HSK
 
-    cachedTracker = pawn.Map.GetComponent<RoofConstructionTracker>();
+    cachedTracker = (pawn.Map ?? pawn.MapHeld)?.GetComponent<RoofConstructionTracker>();
     if (cachedTracker != null && cachedTracker.TryGetRecord(Cell, out var rec))
     {
-        RoofDef roofDef = rec.roofDef;
-        var ext = rec.roofDef.GetModExtension<BuildableRoofExtension>();
+      RoofDef roofDef = rec.roofDef;
+      var ext = rec.roofDef.GetModExtension<BuildableRoofExtension>();
 
-        build.PlaySustainerOrSound(ext?.sustainerSound ?? DefOf.SoundDefOf.Interact_ConstructMetal);
-        build.PlaySoundAtEnd(ext?.finishSound ?? SoundDefOf.Roof_Finish);
+      build.PlaySustainerOrSound(ext?.sustainerSound ?? DefOf.SoundDefOf.Interact_ConstructMetal);
+      build.PlaySoundAtEnd(ext?.finishSound ?? SoundDefOf.Roof_Finish);
 
-        if (ext?.workEffect != null)
-            build.WithEffect(ext.workEffect, TargetIndex.A);
-        else
-            build.WithEffect(EffecterDefOf.RoofWork, TargetIndex.A);
+      if (ext?.workEffect != null)
+        build.WithEffect(ext.workEffect, TargetIndex.A);
+      else
+        build.WithEffect(EffecterDefOf.RoofWork, TargetIndex.A);
     }
+    
     #endregion
 
     build.initAction = () =>

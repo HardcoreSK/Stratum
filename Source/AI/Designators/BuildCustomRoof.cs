@@ -234,6 +234,8 @@ public class BuildCustomRoof : Designator_Build
   public override void SelectedUpdate()
   {
     GenUI.RenderMouseoverBracket();
+    Map.areaManager.NoRoof.MarkForDraw();
+    Map.areaManager.BuildRoof.MarkForDraw();
   }
 
   public override void DrawPanelReadout(ref float curY, float width)

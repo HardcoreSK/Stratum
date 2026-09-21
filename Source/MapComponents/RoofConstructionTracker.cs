@@ -75,9 +75,7 @@ public class RoofConstructionTracker(Map map) : MapComponent(map)
       if (map.areaManager != null)
       {
         map.areaManager.NoRoof[cell] = false;
-        map.areaManager.NoRoof.MarkForDraw();
         map.areaManager.BuildRoof[cell] = false;
-        map.areaManager.BuildRoof.MarkForDraw();
       }
     }
   }
