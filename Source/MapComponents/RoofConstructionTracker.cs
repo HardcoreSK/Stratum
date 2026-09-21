@@ -74,6 +74,7 @@ public class RoofConstructionTracker(Map map) : MapComponent(map)
       }
       if (map.areaManager != null)
       {
+        // Clearing the bits is enough. MarkForDraw on every cell write flashes the vanilla area overlay across the map.
         map.areaManager.NoRoof[cell] = false;
         map.areaManager.BuildRoof[cell] = false;
       }

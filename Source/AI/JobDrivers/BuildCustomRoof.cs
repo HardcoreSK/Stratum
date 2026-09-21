@@ -15,6 +15,12 @@ public class BuildCustomRoof : JobDriver
   protected IntVec3 Cell => TargetA.Cell;
   private RoofConstructionTracker? cachedTracker;
 
+  private RoofConstructionTracker? ResolveTracker()
+  {
+    var map = pawn.Map ?? pawn.MapHeld;
+    return map?.GetComponent<RoofConstructionTracker>();
+  }
+
   public override bool TryMakePreToilReservations(bool errorOnFailed)
   {
     return pawn.Reserve(TargetA, job, 1, -1, null, errorOnFailed);
@@ -37,7 +43,8 @@ public class BuildCustomRoof : JobDriver
 
     #region HSK
 
-    cachedTracker = (pawn.Map ?? pawn.MapHeld)?.GetComponent<RoofConstructionTracker>();
+    // After load, pawn.Map can still be null when toils are built; MapHeld is the same map once the pawn is spawned.
+    cachedTracker = ResolveTracker();
     if (cachedTracker != null && cachedTracker.TryGetRecord(Cell, out var rec))
     {
       RoofDef roofDef = rec.roofDef;
@@ -56,6 +63,7 @@ public class BuildCustomRoof : JobDriver
 
     build.initAction = () =>
       {
+        cachedTracker ??= ResolveTracker();
         if (cachedTracker == null || !cachedTracker.TryGetRecord(Cell, out _))
         {
           EndJobWith(JobCondition.Incompletable);
@@ -63,6 +71,7 @@ public class BuildCustomRoof : JobDriver
       };
     build.tickAction = () =>
         {
+          cachedTracker ??= ResolveTracker();
           if (cachedTracker != null && cachedTracker.TryGetRecord(Cell, out var rec))
           {
             pawn.rotationTracker.FaceCell(Cell);
@@ -99,6 +108,7 @@ public class BuildCustomRoof : JobDriver
 
 	build.WithProgressBar(TargetIndex.A, () =>
     {
+      cachedTracker ??= ResolveTracker();
       if (cachedTracker != null && cachedTracker.TryGetRecord(Cell, out var rec))
         return rec.workDone / rec.workTotal;
       return 0f;

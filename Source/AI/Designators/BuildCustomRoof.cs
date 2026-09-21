@@ -233,9 +233,8 @@ public class BuildCustomRoof : Designator_Build
 
   public override void SelectedUpdate()
   {
+    // This tool is not the vanilla build-roof / remove-roof area; MarkForDraw on those areas here paints them every mouse tick while placing a custom roof.
     GenUI.RenderMouseoverBracket();
-    Map.areaManager.NoRoof.MarkForDraw();
-    Map.areaManager.BuildRoof.MarkForDraw();
   }
 
   public override void DrawPanelReadout(ref float curY, float width)
