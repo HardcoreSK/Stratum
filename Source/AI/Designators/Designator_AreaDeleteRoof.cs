@@ -13,6 +13,7 @@ namespace SolarWeb.Stratum.AI.Designators;
 public class Designator_AreaDeleteRoof : Designator_Cells
 {
   private const string GodModeRequiredMessage = "God Mode required";
+  private const string DevInstantSuffix = " (Dev: instantly)";
 
   public override bool DragDrawMeasurements => true;
 
@@ -22,12 +23,18 @@ public class Designator_AreaDeleteRoof : Designator_Cells
 
   public override GizmoResult GizmoOnGUI(Vector2 topLeft, float maxWidth, GizmoRenderParms parms)
   {
+    if (!Prefs.DevMode)
+      return new GizmoResult(GizmoState.Clear);
+
     ApplyGodModeGate();
     return base.GizmoOnGUI(topLeft, maxWidth, parms);
   }
 
   public override GizmoResult GizmoOnGUIShrunk(Vector2 topLeft, float size, GizmoRenderParms parms)
   {
+    if (!Prefs.DevMode)
+      return new GizmoResult(GizmoState.Clear);
+
     ApplyGodModeGate();
     return base.GizmoOnGUIShrunk(topLeft, size, parms);
   }
@@ -40,7 +47,7 @@ public class Designator_AreaDeleteRoof : Designator_Cells
 
   public Designator_AreaDeleteRoof()
   {
-    defaultLabel = "Stratum_DesignatorAreaDeleteRoof".Translate();
+    defaultLabel = "Stratum_DesignatorAreaDeleteRoof".Translate() + DevInstantSuffix;
     defaultDesc = "Stratum_DesignatorAreaDeleteRoofDesc".Translate();
     icon = ContentFinder<Texture2D>.Get("UI/Designators/NoRoofArea");
     soundDragSustain = SoundDefOf.Designate_DragAreaAdd;
@@ -67,6 +74,12 @@ public class Designator_AreaDeleteRoof : Designator_Cells
 
   public override void SelectedUpdate()
   {
+    if (!Prefs.DevMode)
+    {
+      Find.DesignatorManager.Deselect();
+      return;
+    }
+
     GenUI.RenderMouseoverBracket();
     Map.areaManager.NoRoof.MarkForDraw();
   }
