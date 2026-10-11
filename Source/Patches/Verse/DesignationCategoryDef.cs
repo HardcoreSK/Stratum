@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using HarmonyLib;
 using Verse;
+using SolarWeb.Stratum.AI.Designators;
 using SolarWeb.Stratum.DefModExtensions;
 
 namespace SolarWeb.Stratum.Patches;
@@ -25,5 +27,41 @@ public static class DesignationCategoryDef_Patch
         }
       }
     }
+  }
+
+  // Architect menus draw this list. Delete roofs is omitted unless developer mode is on.
+  // Priority.Last runs after other mods replace the enumerable, so the brush is not put back.
+  [HarmonyPatch(typeof(DesignationCategoryDef), nameof(DesignationCategoryDef.ResolvedAllowedDesignators), MethodType.Getter)]
+  [HarmonyPostfix]
+  [HarmonyPriority(Priority.Last)]
+  public static void ResolvedAllowedDesignators_Postfix(DesignationCategoryDef __instance, ref IEnumerable<Designator> __result)
+  {
+    if (Prefs.DevMode)
+      return;
+
+    List<Designator> resolved = __instance.AllResolvedDesignators;
+    bool hasDelete = false;
+    for (int i = 0; i < resolved.Count; i++)
+    {
+      if (resolved[i] is Designator_AreaDeleteRoof)
+      {
+        hasDelete = true;
+        break;
+      }
+    }
+
+    if (!hasDelete)
+      return;
+
+    List<Designator> kept = new List<Designator>();
+    foreach (Designator designator in __result)
+    {
+      if (designator is Designator_AreaDeleteRoof)
+        continue;
+
+      kept.Add(designator);
+    }
+
+    __result = kept;
   }
 }
