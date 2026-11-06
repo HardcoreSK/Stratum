@@ -15,6 +15,9 @@ public static class RoofFireUtility
 
   public static void SpawnRoofFire(IntVec3 c, Map map, float size, Thing instigator)
   {
+    // Ignition does not go through DamageInfo.Amount. Overhead shots, ground fires, and roof spread all spawn here.
+    if (!DebugSettings.enableDamage) return;
+
     if (c.ContainsRoofFire(map)) return;
 
     RoofFire fire = (RoofFire)ThingMaker.MakeThing(DefOf.ThingDefOf.RoofFire);
@@ -36,6 +39,10 @@ public static class RoofFireUtility
 
   public static void TryIgniteRoofAt(IntVec3 c, Map map, Thing instigator, DamageDef? damageDef = null)
   {
+    // Overhead projectiles, CE, and roof explosions ignite through this method.
+    // Ground fires and roof spread check enableRoofFires before SpawnRoofFire.
+    if (!Stratum.Settings.enableRoofFires) return;
+
     RoofDef roof = c.GetRoof(map);
     if (roof != null && RoofStatCache.IsCustomRoof(roof))
     {

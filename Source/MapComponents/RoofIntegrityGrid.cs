@@ -536,6 +536,11 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
 
   private void TakeDamageInternal(IntVec3 cell, float amount, float penetration, DamageInfo? dinfo, bool bypassProtection)
   {
+    // Thing.TakeDamage reads DamageInfo.Amount, which is 0 while DebugSettings.enableDamage is off.
+    // Callers pass a raw amount into this grid, so that toggle never reaches the stored hit points.
+    // WouldSurviveDamage is separate and stays active, so a skyfaller still bounces off a roof that has hit points.
+    if (!DebugSettings.enableDamage) return;
+
     if (dinfo != null && !dinfo.Value.Def.harmsHealth) return;
 
     if (!cell.InBounds(map)) return;

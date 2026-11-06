@@ -40,6 +40,14 @@ public class RoofFire : Fire
 
   protected override void TickInterval(int delta)
   {
+    // Flame hit points go through TakeFireDamage, and this tick only consults enableRoofFires for spread.
+    // A fire already on the map has to go out when either toggle disallows it, or it keeps burning.
+    if (!DebugSettings.enableDamage || !Stratum.Settings.enableRoofFires)
+    {
+      if (Spawned) Destroy();
+      return;
+    }
+
     int ticksSinceSpawn = ticksSinceSpawnRef(this);
     ticksSinceSpawn += delta;
     ticksSinceSpawnRef(this) = ticksSinceSpawn;
