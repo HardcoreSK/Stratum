@@ -52,6 +52,18 @@ public static class Skyfaller_Patch
     }
 
     CellRect cr = __instance.OccupiedRect();
+    bool underRoof = false;
+    foreach (IntVec3 cell in cr.Cells)
+    {
+      if (cell.InBounds(map) && cell.Roofed(map))
+      {
+        underRoof = true;
+        break;
+      }
+    }
+
+    if (!underRoof) return true;
+
     CellRect cellRect = cr.ExpandedBy((!__instance.def.skyfaller.minimalRoofDestruction) ? 1 : 0).ClipInsideMap(map);
 
     bool anyBuildableRoof = false;
