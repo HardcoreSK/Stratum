@@ -49,6 +49,12 @@ public class RepairCustomRoof : WorkGiver_Scanner
       return false;
     }
 
+    short maxHP = grid.GetMaxHitPoints(cell);
+    if (maxHP > 0 && grid.GetHitPoints(cell) >= maxHP)
+    {
+      return false;
+    }
+
     if (!pawn.CanReserve(cell, 1, -1, null, forced))
     {
       return false;
