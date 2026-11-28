@@ -143,6 +143,9 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
         {
           hitPoints[i] = maxHP;
         }
+
+        if (roofsNeedingRepair.Contains(i) && maxHP > 0 && hitPoints[i] >= maxHP)
+          roofsNeedingRepair.Remove(i);
       }
     }
   }
@@ -329,7 +332,13 @@ public class RoofIntegrityGrid(Map map) : MapComponent(map)
     if (!MapHookRegistry.HasRoofMaxHitPointsHandlers(map))
     {
       roofsNeedingRepair.RemoveWhere(i =>
-        i < 0 || i >= hitPoints.Length || roofGrid.RoofAt(i) == null || hitPoints[i] <= 0);
+      {
+        if (i < 0 || i >= hitPoints.Length || roofGrid.RoofAt(i) == null || hitPoints[i] <= 0)
+          return true;
+
+        short maxHP = GetMaxHitPoints(map.cellIndices.IndexToCell(i));
+        return maxHP > 0 && hitPoints[i] >= maxHP;
+      });
       return;
     }
 
